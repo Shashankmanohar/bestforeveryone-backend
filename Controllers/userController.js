@@ -161,6 +161,7 @@ const signinUser = async (req, res) => {
       user: {
         id: user._id,
         fullname: user.fullname,
+        username: user.username,
         phone: user.phone,
         referralCode: user.referralCode,
         wallet: user.wallet,
@@ -196,6 +197,7 @@ const getUserProfile = async (req, res) => {
       user: {
         id: user._id,
         fullname: user.fullname,
+        username: user.username,
         phone: user.phone,
         referralCode: user.referralCode,
         wallet: user.wallet,
