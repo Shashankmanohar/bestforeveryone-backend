@@ -2,7 +2,6 @@ import express from "express"
 import dotenv from "dotenv"
 import cors from "cors";
 import helmet from "helmet";
-import mongoSanitize from "express-mongo-sanitize";
 import { rateLimit } from "express-rate-limit";
 import connectDB from "./Config/connectDB.js";
 import userRoute from './Routes/userRoutes.js'
@@ -49,7 +48,6 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-app.use(express.json({ limit: '10kb' })); // Body limit to prevent DoS
 app.use('/uploads', express.static('uploads'));
 
 connectDB()
