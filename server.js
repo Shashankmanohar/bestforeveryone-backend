@@ -38,7 +38,7 @@ app.use(cors({
 
 // Security Middleware
 app.use(helmet());
-app.use(mongoSanitize());
+app.use(express.json({ limit: '10kb' })); // Body limit to prevent DoS
 
 // Rate Limiting
 const authLimiter = rateLimit({
@@ -49,10 +49,6 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-app.use('/user/login', authLimiter);
-app.use('/user/signup', authLimiter);
-app.use('/admin/login', authLimiter);
-
 app.use(express.json({ limit: '10kb' })); // Body limit to prevent DoS
 app.use('/uploads', express.static('uploads'));
 
@@ -62,6 +58,11 @@ app.get('/', (req, res) => {
     res.send("Hello from backend!")
 })
 
+
+
+app.use('/user/login', authLimiter);
+app.use('/user/signup', authLimiter);
+app.use('/admin/login', authLimiter);
 
 app.use('/user', userRoute);
 app.use('/admin', adminRoutes);
