@@ -12,10 +12,6 @@ dotenv.config();
 
 const app = express()
 
-// Security Middleware
-app.use(helmet()); // Set security-related HTTP headers
-app.use(mongoSanitize()); // Prevent NoSQL injection
-
 // CORS Configuration
 const allowedOrigins = [
     'https://bestforeveryone.in',
@@ -25,14 +21,24 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
+
+// Security Middleware
+app.use(helmet());
+app.use(mongoSanitize());
 
 // Rate Limiting
 const authLimiter = rateLimit({
