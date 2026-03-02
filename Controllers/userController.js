@@ -9,10 +9,13 @@ const signupUser = async (req, res) => {
     console.log('Signup request received:', req.body);
     const { fullname, username, phone, password, referralCode } = req.body;
 
+    console.log('Validating fields for:', fullname, username);
     if (!fullname || !username || !phone || !password) {
+      console.log('Missing fields:', { fullname: !!fullname, username: !!username, phone: !!phone, password: !!password });
       return res.status(400).json({ message: "All fields are required" });
     }
 
+    console.log('Checking for existing username...');
     const existingUsername = await User.findOne({ username });
     if (existingUsername) {
       return res.status(400).json({ message: "Username already exists" });
@@ -62,6 +65,7 @@ const signupUser = async (req, res) => {
       }
     }
 
+    console.log('Hashing password...');
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Generate unique referral code
@@ -78,6 +82,7 @@ const signupUser = async (req, res) => {
       codeExists = await User.findOne({ referralCode: newReferralCode });
     }
 
+    console.log('Creating user in database...');
     const user = await User.create({
       fullname,
       username,
@@ -88,6 +93,7 @@ const signupUser = async (req, res) => {
       verified: false, // Require payment verification
       paymentStatus: 'pending'
     });
+    console.log('User created successfully:', user._id);
 
     // Create pending referral record if referrer exists
     if (referrer) {
