@@ -116,7 +116,8 @@ const signupUser = async (req, res) => {
         wallet: user.wallet,
         matrix: user.matrix,
         verified: user.verified,
-        paymentStatus: user.paymentStatus
+        paymentStatus: user.paymentStatus,
+        kyc: user.kyc
       },
       token,
     });
@@ -169,7 +170,8 @@ const signinUser = async (req, res) => {
         weeklyStats: updatedWeeklyStats,
         status: user.status,
         verified: user.verified,
-        paymentStatus: user.paymentStatus
+        paymentStatus: user.paymentStatus,
+        kyc: user.kyc
       },
       token,
     });
@@ -206,6 +208,7 @@ const getUserProfile = async (req, res) => {
         status: user.status,
         verified: user.verified,
         paymentStatus: user.paymentStatus,
+        kyc: user.kyc,
         createdAt: user.createdAt
       }
     });
@@ -354,4 +357,89 @@ const activateOtherUser = async (req, res) => {
   }
 };
 
-export { signupUser, signinUser, getUserProfile, submitPaymentProof, activateOtherUser };
+// Submit KYC Details
+const submitKyc = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { accountNumber, ifscCode, accountHolderName, bankName } = req.body;
+
+    if (!accountNumber || !ifscCode || !accountHolderName || !bankName) {
+      return res.status(400).json({ message: "All bank details are required" });
+    }
+
+    if (!req.files || !req.files.aadharCard || !req.files.panCard) {
+      return res.status(400).json({ message: "Both Aadhar and PAN card uploads are required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.kyc?.status === 'approved') {
+      return res.status(400).json({ message: "KYC already approved." });
+    }
+
+    user.kyc = {
+      aadharCard: req.files.aadharCard[0].path,
+      panCard: req.files.panCard[0].path,
+      bankDetails: {
+        accountNumber,
+        ifscCode,
+        accountHolderName,
+        bankName
+      },
+      status: 'approved',
+      submittedAt: new Date(),
+      approvedAt: new Date()
+    };
+
+    await user.save();
+
+    res.json({
+      message: "KYC submitted and approved successfully. You can now proceed with your withdrawal.",
+      kycStatus: user.kyc.status
+    });
+  } catch (error) {
+    console.error('KYC Submission Error:', error);
+    res.status(500).json({ message: error.message || "Internal Server Error" });
+  }
+};
+
+
+// Change Password
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "Current and new passwords are required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect current password" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error('Change Password Error:', error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export { signupUser, signinUser, getUserProfile, submitPaymentProof, activateOtherUser, submitKyc, changePassword };

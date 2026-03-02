@@ -63,11 +63,12 @@ export const processBonanza = async () => {
 
         // Process each referrer
         for (const [referrerId, refs] of referrerMap.entries()) {
-            const bonusUnlocked = refs.length >= 3;
-            const amount = bonusUnlocked ? 400 : 200;
+            const count = refs.length;
+            if (count < 2) continue; // Minimum 2 required for bonanza
 
+            const bonusPerHead = 200;
+            const totalBonanza = count * bonusPerHead;
             const user = await User.findById(referrerId);
-            const totalBonanza = amount * refs.length;
 
             // Credit bonanza
             user.wallet.balance += totalBonanza;

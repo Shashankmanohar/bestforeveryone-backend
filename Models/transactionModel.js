@@ -8,7 +8,7 @@ const transactionSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['Matrix Income', 'Referral Bonus', 'Withdrawal', 'Leadership', 'Bonanza', 'Weekly Bonanza', 'Referral Royalty', 'Admin Adjustment', 'User Activation', 'Account Activation'],
+        enum: ['Matrix Income', 'Referral Bonus', 'Withdrawal', 'Leadership', 'Bonanza', 'Weekly Bonanza', 'Referral Royalty', 'Admin Adjustment', 'User Activation', 'Account Activation', 'E-pin Purchase'],
         required: true
     },
     description: {

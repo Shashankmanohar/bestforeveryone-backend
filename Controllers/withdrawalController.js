@@ -5,7 +5,7 @@ import Revenue from '../Models/revenueModel.js';
 
 export const createWithdrawalRequest = async (req, res) => {
     try {
-        const { amount, bankDetails, walletType = 'current' } = req.body;
+        const { amount, walletType = 'current' } = req.body;
 
         if (!amount || amount < 200) {
             return res.status(400).json({ message: "Minimum withdrawal is ₹200" });
@@ -33,6 +33,22 @@ export const createWithdrawalRequest = async (req, res) => {
         if (amount > balance) {
             return res.status(400).json({ message: `Insufficient ${walletType} wallet balance` });
         }
+
+        // Enforce KYC
+        if (user.kyc.status !== 'approved') {
+            return res.status(403).json({
+                message: "KYC is mandatory for withdrawals.",
+                requiresKyc: true,
+                kycStatus: user.kyc.status
+            });
+        }
+
+        const bankDetails = {
+            accountNumber: user.kyc.bankDetails.accountNumber,
+            ifscCode: user.kyc.bankDetails.ifscCode,
+            accountHolderName: user.kyc.bankDetails.accountHolderName,
+            bankName: user.kyc.bankDetails.bankName
+        };
 
         // Check weekly limit
         const effectiveLimit = Math.max(user.weeklyStats.withdrawalLimit, 50000);

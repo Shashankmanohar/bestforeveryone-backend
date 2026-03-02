@@ -71,10 +71,12 @@ export const getWeeklyReferralStats = async (req, res) => {
         const bonusThreshold = 2;
         const bonusUnlocked = monFriCount >= bonusThreshold;
         const baseReward = 200;
-        const bonusAmount = 400; // One-time bonanza
+
+        // New tiered bonanza: ₹400 for first 2, then ₹200 for each additional
+        // Mathematically: monFriCount * 200 if monFriCount >= 2
+        const bonusEarnings = bonusUnlocked ? monFriCount * 200 : 0;
 
         const baseEarnings = weeklyCount * baseReward;
-        const bonusEarnings = bonusUnlocked ? bonusAmount : 0;
         const totalEarnings = baseEarnings + bonusEarnings;
 
         res.json({
@@ -144,7 +146,7 @@ export const processReferralSignup = async (referrerId, referredId) => {
         const baseAmount = 200;
         await creditReferralBonus(referrer, baseAmount, referredId);
 
-        // 3. Weekly Bonanza: Additional ₹200 per referral on Mon-Fri if 2+ referrals
+        // 3. Weekly Bonanza: Tiered rewards on Mon-Fri
         const isMonFri = dayOfWeek >= 1 && dayOfWeek <= 5;
         if (isMonFri) {
             const currentRefs = await Referral.find({
@@ -159,11 +161,14 @@ export const processReferralSignup = async (referrerId, referredId) => {
             const count = monFriRefs.length;
 
             if (count === 2) {
-                // If this is exactly the 2nd referral on Mon-Fri, credit the ONE-TIME ₹400 bonus
+                // For the 2nd referral, credit ₹400 (covers 1st and 2nd at ₹200 each)
                 const bonusAmount = 400;
-                await creditBonanza(referrer, bonusAmount, 'Weekly Milestone: 2 Referrals Bonus', referredId);
+                await creditBonanza(referrer, bonusAmount, 'Weekly Bonanza: 2 Referrals reached', referredId);
+            } else if (count > 2) {
+                // For every referral after the 2nd, credit ₹200 each
+                const bonusAmount = 200;
+                await creditBonanza(referrer, bonusAmount, `Weekly Bonanza: Referral #${count}`, referredId);
             }
-            // For count > 2 or weekend referrals, no extra bonanza is given (only base 200)
         }
 
         referral.rewardCredited = true;

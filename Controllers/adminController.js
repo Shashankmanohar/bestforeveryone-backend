@@ -1,19 +1,24 @@
 import adminModel from "../Models/adminModels.js";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import User from "../Models/userModels.js";
 import Transaction from "../Models/transactionModel.js";
 import Withdrawal from "../Models/withdrawalModel.js";
 import Referral from "../Models/referralModel.js";
 import Revenue from "../Models/revenueModel.js";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 
 export const adminRegister = async (req, res) => {
   try {
-    const { adminName, email, password } = req.body;
+    const { adminName, email, password, registrationKey } = req.body;
 
-    if (!adminName || !email || !password) {
+    if (!adminName || !email || !password || !registrationKey) {
       return res.status(400).json({ message: "All fields are required!" });
+    }
+
+    // Security check: Verify registration key
+    if (registrationKey !== process.env.ADMIN_REGISTRATION_KEY) {
+      return res.status(403).json({ message: "Unauthorized: Invalid registration key" });
     }
 
     // Email validation
@@ -515,3 +520,82 @@ export const rejectPayment = async (req, res) => {
   }
 };
 
+// ===== KYC MANAGEMENT =====
+export const getPendingKyc = async (req, res) => {
+  try {
+    // Show all users who have submitted KYC (since they are auto-approved now)
+    const kycUsers = await User.find({ 'kyc.status': 'approved' })
+      .select('fullname username phone kyc createdAt')
+      .sort({ 'kyc.submittedAt': -1 });
+
+    res.json({ pendingKycUsers: kycUsers });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const approveKyc = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const adminId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.kyc.status !== 'pending') {
+      return res.status(400).json({ message: "KYC not pending or already processed" });
+    }
+
+    user.kyc.status = 'approved';
+    user.kyc.approvedAt = new Date();
+    user.kyc.approvedBy = adminId;
+    await user.save();
+
+    res.json({
+      message: "KYC approved successfully",
+      user: {
+        id: user._id,
+        fullname: user.fullname,
+        kycStatus: user.kyc.status
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const rejectKyc = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.kyc.status !== 'pending') {
+      return res.status(400).json({ message: "KYC not pending or already processed" });
+    }
+
+    user.kyc.status = 'rejected';
+    user.kyc.rejectionReason = reason || 'KYC verification failed';
+    await user.save();
+
+    res.json({
+      message: "KYC rejected",
+      user: {
+        id: user._id,
+        fullname: user.fullname,
+        kycStatus: user.kyc.status
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};

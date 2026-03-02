@@ -13,8 +13,12 @@ import {
   updateSystemConfig,
   getPendingPayments,
   approvePayment,
-  rejectPayment
+  rejectPayment,
+  getPendingKyc,
+  approveKyc,
+  rejectKyc
 } from "../Controllers/adminController.js";
+
 import {
   adminGetAllWithdrawals,
   adminApproveWithdrawal,
@@ -43,6 +47,11 @@ router.put("/users/:id/status", authMiddleware(), updateUserStatus);
 router.get("/pending-payments", authMiddleware(), getPendingPayments);
 router.put("/payment/approve/:userId", authMiddleware(), approvePayment);
 router.put("/payment/reject/:userId", authMiddleware(), rejectPayment);
+
+// KYC management
+router.get("/kyc/pending", authMiddleware(), getPendingKyc);
+router.put("/kyc/approve/:userId", authMiddleware(), approveKyc);
+router.put("/kyc/reject/:userId", authMiddleware(), rejectKyc);
 
 // Withdrawals
 router.get("/withdrawals", authMiddleware(), adminGetAllWithdrawals);

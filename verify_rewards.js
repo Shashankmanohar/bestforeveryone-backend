@@ -12,32 +12,36 @@ const verifyRewards = async () => {
         await mongoose.connect(mongoUri);
         console.log('Connected to MongoDB');
 
+        // Mock Date.getDay to return 1 (Monday) to trigger bonanza logic
+        const originalGetDay = Date.prototype.getDay;
+        Date.prototype.getDay = function () { return 1; };
+
         // Create a test referrer
         const referrer = await User.create({
             fullname: 'Test Referrer',
+            username: 'testreferrer',
             phone: '1234567800',
-            dateofbirth: '1990-01-01',
             password: 'password123',
             referralCode: 'TESTREF1'
         });
 
         console.log('\n--- Test 1: First Referral (Should be ₹200) ---');
-        const ref1 = await User.create({ fullname: 'Ref 1', phone: '1111111110', dateofbirth: '2000-01-01', password: 'p', referralCode: 'R1' });
+        const ref1 = await User.create({ fullname: 'Ref 1', username: 'ref1', phone: '1111111110', password: 'p', referralCode: 'R1' });
         await processReferralSignup(referrer._id, ref1._id);
         let updatedReferrer = await User.findById(referrer._id);
         console.log(`Referrer Wallet Balance: ₹${updatedReferrer.wallet.balance} (Expected 200)`);
 
         console.log('\n--- Test 2: Second Referral (Should be ₹200 + ₹400 bonus = ₹600 more, total ₹800) ---');
-        const ref2 = await User.create({ fullname: 'Ref 2', phone: '2222222220', dateofbirth: '2000-01-01', password: 'p', referralCode: 'R2' });
+        const ref2 = await User.create({ fullname: 'Ref 2', username: 'ref2', phone: '2222222220', password: 'p', referralCode: 'R2' });
         await processReferralSignup(referrer._id, ref2._id);
         updatedReferrer = await User.findById(referrer._id);
         console.log(`Referrer Wallet Balance: ₹${updatedReferrer.wallet.balance} (Expected 800)`);
 
-        console.log('\n--- Test 3: Third Referral (Should be ₹200 only, total ₹1000) ---');
-        const ref3 = await User.create({ fullname: 'Ref 3', phone: '3333333330', dateofbirth: '2000-01-01', password: 'p', referralCode: 'R3' });
+        console.log('\n--- Test 3: Third Referral (Should be ₹200 + ₹200 bonus = ₹400 more, total ₹1200) ---');
+        const ref3 = await User.create({ fullname: 'Ref 3', username: 'ref3', phone: '3333333330', password: 'p', referralCode: 'R3' });
         await processReferralSignup(referrer._id, ref3._id);
         updatedReferrer = await User.findById(referrer._id);
-        console.log(`Referrer Wallet Balance: ₹${updatedReferrer.wallet.balance} (Expected 1000)`);
+        console.log(`Referrer Wallet Balance: ₹${updatedReferrer.wallet.balance} (Expected 1200)`);
 
         // Cleanup
         await User.deleteMany({ _id: { $in: [referrer._id, ref1._id, ref2._id, ref3._id] } });
