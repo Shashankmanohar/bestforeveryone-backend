@@ -1,6 +1,6 @@
 import express from "express"
 import dotenv from "dotenv"
-import cors from "cors";
+// cors handled manually below
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import connectDB from "./Config/connectDB.js";
@@ -11,7 +11,8 @@ dotenv.config();
 
 const app = express()
 
-// CORS Configuration
+// CORS: Manual preflight handler — MUST be the very first middleware
+// This catches OPTIONS requests before helmet or anything else can interfere
 const allowedOrigins = [
     'https://bestforeveryone.in',
     'https://www.bestforeveryone.in',
@@ -19,29 +20,24 @@ const allowedOrigins = [
     'http://localhost:3000'
 ];
 
-const corsOptions = {
-    origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    optionsSuccessStatus: 200
-};
-
-// Handle OPTIONS preflight for ALL routes BEFORE any other middleware
-app.options('*', cors(corsOptions));
-app.use(cors(corsOptions));
+    // Respond to preflight immediately — do NOT let any other middleware touch it
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
 
 // Security Middleware — disable crossOriginResourcePolicy so it doesn't override CORS headers
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
 app.use(express.json({ limit: '10kb' })); // Body limit to prevent DoS
 
 // Rate Limiting
