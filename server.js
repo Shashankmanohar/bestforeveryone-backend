@@ -14,11 +14,12 @@ const app = express()
 // CORS Configuration
 const allowedOrigins = [
     'https://bestforeveryone.in',
+    'https://www.bestforeveryone.in',
     'http://localhost:5173',
     'http://localhost:3000'
 ];
 
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
@@ -32,11 +33,15 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
-    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
-}));
+    optionsSuccessStatus: 200
+};
 
-// Security Middleware
-app.use(helmet());
+// Handle OPTIONS preflight for ALL routes BEFORE any other middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
+
+// Security Middleware — disable crossOriginResourcePolicy so it doesn't override CORS headers
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10kb' })); // Body limit to prevent DoS
 
 // Rate Limiting
