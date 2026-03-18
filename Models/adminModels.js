@@ -18,7 +18,9 @@ const adminModel = new mongoose.Schema({
         type: String,
         enum: ["admin", "superadmin"],
         default: "admin"
-    }
+    },
+    resetPasswordOTP: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null }
 
 })
 

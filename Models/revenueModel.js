@@ -16,6 +16,10 @@ const revenueSchema = new mongoose.Schema({
     lastUpdated: {
         type: Date,
         default: Date.now
+    },
+    lastRoyaltyDistribution: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 

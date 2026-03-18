@@ -1,5 +1,6 @@
 import express from 'express';
 import { signupUser, signinUser, getUserProfile, submitPaymentProof, activateOtherUser, submitKyc, changePassword } from '../Controllers/userController.js';
+import { userForgotPassword, userResetPassword } from '../Controllers/forgotPasswordController.js';
 import { getWalletBalance, getTransactionHistory, getEarningsBreakdown } from '../Controllers/walletController.js';
 import { getMatrixStatus, getMatrixTree } from '../Controllers/matrixController.js';
 import { getReferralCode, getUserReferrals, getWeeklyReferralStats } from '../Controllers/referralController.js';
@@ -14,6 +15,8 @@ const router = express.Router();
 // Auth routes (public)
 router.post('/signup', signupUser);
 router.post('/login', signinUser);
+router.post('/forgot-password', userForgotPassword);
+router.post('/reset-password', userResetPassword);
 
 // Protected routes
 router.get('/profile', authMiddleware(['user']), getUserProfile);

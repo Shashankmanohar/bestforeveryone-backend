@@ -7,11 +7,11 @@ import { processMatrixPlacement } from "./matrixController.js";
 const signupUser = async (req, res) => {
   try {
     console.log('Signup request received:', req.body);
-    const { fullname, username, phone, password, referralCode } = req.body;
+    const { fullname, username, email, password, referralCode } = req.body;
 
     console.log('Validating fields for:', fullname, username);
-    if (!fullname || !username || !phone || !password) {
-      console.log('Missing fields:', { fullname: !!fullname, username: !!username, phone: !!phone, password: !!password });
+    if (!fullname || !username || !email || !password) {
+      console.log('Missing fields:', { fullname: !!fullname, username: !!username, email: !!email, password: !!password });
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -21,9 +21,9 @@ const signupUser = async (req, res) => {
       return res.status(400).json({ message: "Username already exists" });
     }
 
-    const userCount = await User.countDocuments({ phone });
+    const userCount = await User.countDocuments({ email: email.toLowerCase() });
     if (userCount >= 6) {
-      return res.status(400).json({ message: "Maximum 6 IDs allowed per mobile number" });
+      return res.status(400).json({ message: "Maximum 6 IDs allowed per email address" });
     }
 
     if (password.length < 6) {
@@ -86,7 +86,7 @@ const signupUser = async (req, res) => {
     const user = await User.create({
       fullname,
       username,
-      phone,
+      email: email.toLowerCase(),
       password: hashedPassword,
       referralCode: newReferralCode,
       referredBy: referrer ? referrer._id : null,
@@ -117,7 +117,7 @@ const signupUser = async (req, res) => {
         id: user._id,
         fullname: user.fullname,
         username: user.username,
-        phone: user.phone,
+        email: user.email,
         referralCode: user.referralCode,
         wallet: user.wallet,
         matrix: user.matrix,
@@ -169,7 +169,7 @@ const signinUser = async (req, res) => {
         id: user._id,
         fullname: user.fullname,
         username: user.username,
-        phone: user.phone,
+        email: user.email,
         referralCode: user.referralCode,
         wallet: user.wallet,
         matrix: user.matrix,
@@ -206,7 +206,7 @@ const getUserProfile = async (req, res) => {
         id: user._id,
         fullname: user.fullname,
         username: user.username,
-        phone: user.phone,
+        email: user.email,
         referralCode: user.referralCode,
         wallet: user.wallet,
         matrix: user.matrix,
@@ -274,8 +274,8 @@ const activateOtherUser = async (req, res) => {
       return res.status(404).json({ message: "Activator not found" });
     }
 
-    if (activator.wallet.balance < 1180) {
-      return res.status(400).json({ message: "Insufficient balance. You need at least ₹1180 to activate another account." });
+    if (activator.wallet.balance < 1000) {
+      return res.status(400).json({ message: "Insufficient balance. You need at least ₹1000 to activate another account." });
     }
 
     // 2. Find target user
@@ -290,7 +290,7 @@ const activateOtherUser = async (req, res) => {
 
     // 3. Process Activation
     // Deduct from activator
-    activator.wallet.balance -= 1180;
+    activator.wallet.balance -= 1000;
     await activator.save();
 
     // Create debit transaction for activator
@@ -299,7 +299,7 @@ const activateOtherUser = async (req, res) => {
       user: activator._id,
       type: 'User Activation',
       description: `Activated account: ${targetUser.username}`,
-      amount: 1180,
+      amount: 1000,
       status: 'debit'
     });
 
@@ -318,7 +318,7 @@ const activateOtherUser = async (req, res) => {
       user: targetUser._id,
       type: 'Account Activation',
       description: `Activated by: ${activator.username}`,
-      amount: 1180,
+      amount: 1000,
       status: 'credit'
     });
 
@@ -344,8 +344,8 @@ const activateOtherUser = async (req, res) => {
       {},
       {
         $inc: {
-          totalRevenue: 1180,
-          totalJoiningFees: 1180
+          totalRevenue: 1000,
+          totalJoiningFees: 1000
         },
         $set: { lastUpdated: new Date() }
       },

@@ -17,7 +17,8 @@ const allowedOrigins = [
     'https://bestforeveryone.in',
     'https://www.bestforeveryone.in',
     'http://localhost:5173',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://localhost:8080'
 ];
 
 app.use((req, res, next) => {
@@ -66,6 +67,16 @@ app.use('/admin/login', authLimiter);
 app.use('/user', userRoute);
 app.use('/admin', adminRoutes);
 app.use('/withdrawal', withdrawalRoutes);
+
+// Global Error Handler for debugging
+app.use((err, req, res, next) => {
+    console.error("Global Error Caught:", err);
+    res.status(500).json({
+        message: "Internal Server Error",
+        error: err.message || err.toString(),
+        stack: err.stack
+    });
+});
 
 export default app;
 

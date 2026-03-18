@@ -28,10 +28,10 @@ export const createWithdrawalRequest = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        const balance = walletType === 'matrix' ? user.wallet.matrixWallet : user.wallet.balance;
+        const balance = user.wallet.balance;
 
         if (amount > balance) {
-            return res.status(400).json({ message: `Insufficient ${walletType} wallet balance` });
+            return res.status(400).json({ message: `Insufficient wallet balance` });
         }
 
         // Enforce KYC
@@ -58,26 +58,22 @@ export const createWithdrawalRequest = async (req, res) => {
             });
         }
 
-        const adminFee = walletType === 'matrix' ? 0 : amount * 0.20; // 0% for matrix, 20% for current
+        // Matrix wallet has been removed, all withdrawals carry a 20% fee
+        const adminFee = amount * 0.20;
         const netPayable = amount - adminFee;
 
         // Create withdrawal request
         const withdrawal = await Withdrawal.create({
             user: req.user.id,
             amount,
-            walletType,
             adminFee,
             netPayable,
             bankDetails,
             status: 'pending'
         });
 
-        // Deduct from balance immediately
-        if (walletType === 'matrix') {
-            user.wallet.matrixWallet -= amount;
-        } else {
-            user.wallet.balance -= amount;
-        }
+        // Deduct from wallet
+        user.wallet.balance -= amount;
         user.wallet.pending += amount;
         user.weeklyStats.withdrawalUsed += amount;
         await user.save();
@@ -86,7 +82,7 @@ export const createWithdrawalRequest = async (req, res) => {
         await Transaction.create({
             user: req.user.id,
             type: 'Withdrawal',
-            description: `Processing (${walletType})... #${withdrawal._id.toString().slice(-6)}`,
+            description: `Processing... #${withdrawal._id.toString().slice(-6)}`,
             amount,
             status: 'debit'
         });
@@ -146,7 +142,7 @@ export const adminGetAllWithdrawals = async (req, res) => {
         const filter = status ? { status } : {};
 
         const withdrawals = await Withdrawal.find(filter)
-            .populate('user', 'fullname phone')
+            .populate('user', 'fullname email')
             .sort({ createdAt: -1 })
             .limit(100);
 
@@ -184,11 +180,7 @@ export const adminApproveWithdrawal = async (req, res) => {
 
             // Refund to user balance
             const user = await User.findById(withdrawal.user);
-            if (withdrawal.walletType === 'matrix') {
-                user.wallet.matrixWallet += withdrawal.amount;
-            } else {
-                user.wallet.balance += withdrawal.amount;
-            }
+            user.wallet.balance += withdrawal.amount;
             user.wallet.pending -= withdrawal.amount;
             user.weeklyStats.withdrawalUsed -= withdrawal.amount;
             await user.save();

@@ -180,7 +180,7 @@ export const getRecentActivity = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
 
     const activities = await Transaction.find()
-      .populate('user', 'fullname phone')
+      .populate('user', 'fullname email')
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -202,7 +202,7 @@ export const getAllUsers = async (req, res) => {
       filter.$or = [
         { fullname: { $regex: search, $options: 'i' } },
         { username: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { email: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -234,7 +234,7 @@ export const getUserDetails = async (req, res) => {
 
     const user = await User.findById(id)
       .select('-password')
-      .populate('referredBy', 'fullname username phone referralCode');
+      .populate('referredBy', 'fullname username email referralCode');
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -242,7 +242,7 @@ export const getUserDetails = async (req, res) => {
 
     // Get user's referrals
     const referrals = await Referral.find({ referrer: id })
-      .populate('referred', 'fullname phone')
+      .populate('referred', 'fullname email')
       .sort({ createdAt: -1 });
 
     // Get recent transactions
@@ -345,7 +345,7 @@ export const getFinancialLedger = async (req, res) => {
     if (category) filter.type = category;
 
     const transactions = await Transaction.find(filter)
-      .populate('user', 'fullname phone')
+      .populate('user', 'fullname email')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
@@ -410,7 +410,7 @@ export const updateSystemConfig = async (req, res) => {
 export const getPendingPayments = async (req, res) => {
   try {
     const pendingUsers = await User.find({ paymentStatus: 'submitted' })
-      .select('fullname username phone paymentStatus paymentProof createdAt')
+      .select('fullname username email paymentStatus paymentProof createdAt')
       .sort({ 'paymentProof.submittedAt': -1 });
 
     res.json({ pendingUsers });
@@ -425,52 +425,78 @@ export const approvePayment = async (req, res) => {
     const { userId } = req.params;
     const adminId = req.user.id;
 
+    console.log('📝 [approvePayment] Starting for userId:', userId);
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    console.log('📝 [approvePayment] Found user:', user.fullname, '| paymentStatus:', user.paymentStatus);
+
     if (user.paymentStatus !== 'submitted') {
       return res.status(400).json({ message: "Payment not submitted or already processed" });
     }
 
-    // Approve payment
+    // Approve payment — core step, must always succeed
     user.paymentStatus = 'approved';
     user.verified = true;
+    if (!user.paymentProof) {
+      user.paymentProof = {};
+    }
     user.paymentProof.approvedAt = new Date();
     user.paymentProof.approvedBy = adminId;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
+    console.log('✅ [approvePayment] User saved as approved');
 
-    // Process referral bonuses and matrix placement if user has a referrer
+    // Process referral bonuses and matrix placement (wrapped so a failure here won't block the approval)
     if (user.referredBy) {
-      const { processReferralSignup } = await import('./referralController.js');
-      const { processMatrixPlacement } = await import('./matrixController.js');
+      try {
+        const { processReferralSignup } = await import('./referralController.js');
+        const { processMatrixPlacement } = await import('./matrixController.js');
 
-      // RESET CYCLE IF REACTIVATING
-      if (user.matrix.cycle > 5) {
-        console.log(`🔄 Resetting cycles for reactivated user: ${user.fullname}`);
-        user.matrix.cycle = 1;
-        user.matrix.level1.filled = 0;
-        await user.save();
+        // Re-fetch fresh user to avoid stale document issues
+        const freshUser = await User.findById(userId);
+
+        // RESET CYCLE IF REACTIVATING
+        if (freshUser.matrix && freshUser.matrix.cycle > 5) {
+          console.log(`🔄 Resetting cycles for reactivated user: ${freshUser.fullname}`);
+          freshUser.matrix.cycle = 1;
+          if (freshUser.matrix.level1) {
+            freshUser.matrix.level1.filled = 0;
+          }
+          await freshUser.save({ validateBeforeSave: false });
+        }
+
+        console.log('📝 [approvePayment] Processing referral signup for referrer:', user.referredBy);
+        await processReferralSignup(user.referredBy, user._id);
+
+        console.log('📝 [approvePayment] Processing matrix placement for user:', user._id);
+        await processMatrixPlacement(user._id, user.referredBy);
+
+        console.log('✅ [approvePayment] Referral & matrix processing complete');
+      } catch (bonusError) {
+        // Log but don't fail the approval itself
+        console.error('⚠️ [approvePayment] Bonus/matrix processing failed (approval still succeeded):', bonusError.message);
+        console.error(bonusError.stack);
       }
-
-      await processReferralSignup(user.referredBy, user._id);
-      await processMatrixPlacement(user._id, user.referredBy);
     }
 
     // Update Platform Revenue
+    console.log('📝 [approvePayment] Updating platform revenue...');
     await Revenue.findOneAndUpdate(
       {},
       {
         $inc: {
-          totalRevenue: 1180,
-          totalJoiningFees: 1180
+          totalRevenue: 1000,
+          totalJoiningFees: 1000
         },
         $set: { lastUpdated: new Date() }
       },
       { upsert: true, new: true }
     );
 
+    console.log('✅ [approvePayment] All done!');
     res.json({
       message: "Payment approved successfully",
       user: {
@@ -482,7 +508,8 @@ export const approvePayment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
+    console.error('❌ [approvePayment] Fatal error:', error.message);
+    console.error(error.stack);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -503,6 +530,9 @@ export const rejectPayment = async (req, res) => {
 
     // Reject payment
     user.paymentStatus = 'rejected';
+    if (!user.paymentProof) {
+      user.paymentProof = {};
+    }
     user.paymentProof.rejectionReason = reason || 'Payment verification failed';
     await user.save();
 
@@ -525,7 +555,7 @@ export const getPendingKyc = async (req, res) => {
   try {
     // Show all users who have submitted KYC (since they are auto-approved now)
     const kycUsers = await User.find({ 'kyc.status': 'approved' })
-      .select('fullname username phone kyc createdAt')
+      .select('fullname username email kyc createdAt')
       .sort({ 'kyc.submittedAt': -1 });
 
     res.json({ pendingKycUsers: kycUsers });

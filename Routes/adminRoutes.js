@@ -19,11 +19,14 @@ import {
   rejectKyc
 } from "../Controllers/adminController.js";
 
+import { adminForgotPassword, adminResetPassword } from "../Controllers/forgotPasswordController.js";
+
 import {
   adminGetAllWithdrawals,
   adminApproveWithdrawal,
   adminMarkCompleted
 } from "../Controllers/withdrawalController.js";
+import { distributeWeeklyRoyalty } from "../Controllers/weeklyRoyaltyController.js";
 import authMiddleware from "../Auth/auth.js";
 
 const router = Router();
@@ -31,6 +34,8 @@ const router = Router();
 // ===== PUBLIC ROUTES =====
 router.post("/register", adminRegister);
 router.post("/login", adminLogin);
+router.post("/forgot-password", adminForgotPassword);
+router.post("/reset-password", adminResetPassword);
 
 // ===== PROTECTED ADMIN ROUTES =====
 // Dashboard
@@ -58,8 +63,9 @@ router.get("/withdrawals", authMiddleware(), adminGetAllWithdrawals);
 router.put("/withdrawals/:id/approve", authMiddleware(), adminApproveWithdrawal);
 router.put("/withdrawals/:id/complete", authMiddleware(), adminMarkCompleted);
 
-// Financial Ledger
+// Financial Ledger & Royalties
 router.get("/ledger", authMiddleware(), getFinancialLedger);
+router.post("/distribute-royalty", authMiddleware(), distributeWeeklyRoyalty);
 
 // System Configuration
 router.get("/config", authMiddleware(), getSystemConfig);

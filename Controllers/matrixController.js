@@ -24,7 +24,7 @@ export const getMatrixTree = async (req, res) => {
         const level1Members = await Matrix.find({
             parent: req.user.id,
             level: 1
-        }).populate('user', 'fullname phone');
+        }).populate('user', 'fullname email');
 
         res.json({
             level1: level1Members.map(m => ({
@@ -40,20 +40,26 @@ export const getMatrixTree = async (req, res) => {
     }
 };
 
-export const processMatrixPlacement = async (userId, parentId) => {
+export const processMatrixPlacement = async (userId, referrerId) => {
     try {
-        console.log('=== STARTING MATRIX PLACEMENT ===');
+        console.log('=== STARTING GLOBAL MATRIX PLACEMENT ===');
         console.log('User ID:', userId);
-        console.log('Parent ID:', parentId);
 
-        const parent = await User.findById(parentId);
+        // Find the global parent (the oldest active user who still has space in their Level 1)
+        // We ensure we only search for users who are verified (active) and haven't finished their cycle
+        const parent = await User.findOne({
+            verified: true,
+            "matrix.level1.filled": { $lt: 6 },
+            "matrix.cycle": { $lte: 1 } // Only considering cycle 1 as per "one time" rule
+        }).sort({ createdAt: 1 }); // Oldest first (top-to-bottom, left-to-right)
+
         if (!parent) {
-            console.log('❌ Parent not found');
+            console.log('❌ No eligible global parent found in the matrix.');
             return;
         }
 
-        console.log('Parent:', parent.fullname);
-        console.log('Current Matrix Status:');
+        console.log('Global Parent Selected:', parent.fullname, `(${parent._id})`);
+        console.log('Current Global Parent Matrix Status:');
         console.log('  Level 1:', parent.matrix.level1.filled, '/', parent.matrix.level1.total);
         console.log('  Cycle:', parent.matrix.cycle);
 
@@ -66,17 +72,20 @@ export const processMatrixPlacement = async (userId, parentId) => {
 
         // Check Level 1 first
         if (parent.matrix.level1.filled < parent.matrix.level1.total) {
-            // Place in Level 1
+            // Place in Level 1 under the global parent
             const position = parent.matrix.level1.filled + 1;
             console.log('➡️  Placing in Level 1, Position:', position);
 
             await Matrix.create({
                 user: userId,
-                parent: parentId,
+                parent: parent._id,
                 level: 1,
                 position,
                 cycle: parent.matrix.cycle
             });
+
+            // --- Gradual Payment of Rs 400 per placement to the global parent ---
+            await creditGradualMatrixIncome(parent._id, userId, position);
 
             parent.matrix.level1.filled += 1;
             await parent.save();
@@ -84,15 +93,15 @@ export const processMatrixPlacement = async (userId, parentId) => {
 
             // Check if Level 1 completed
             if (parent.matrix.level1.filled === parent.matrix.level1.total) {
-                console.log('🎉 LEVEL 1 COMPLETED!');
-                await creditMatrixIncome(parentId, 1);
-                // Increment cycle and reset for new cycle
+                console.log('🎉 LEVEL 1 COMPLETED FOR GLOBAL PARENT!');
+
+                // User has completed their 1 time matrix cycle
                 parent.matrix.cycle += 1;
                 parent.matrix.level1.filled = 0;
 
-                // CHECK CYCLE LIMIT (Max 5)
-                if (parent.matrix.cycle > 5) {
-                    console.log(`⚠️ User ${parent.fullname} has completed 5 cycles. Deactivating for reactivation.`);
+                // CHECK CYCLE LIMIT (Max 1) - One Time from one Active ID only
+                if (parent.matrix.cycle > 1) {
+                    console.log(`⚠️ User ${parent.fullname} has completed 1 matrix cycle. They will not receive further matrix income. Deactivating for reactivation if necessary.`);
                     parent.verified = false;
                     parent.paymentStatus = 'pending';
                 }
@@ -104,28 +113,31 @@ export const processMatrixPlacement = async (userId, parentId) => {
             console.log('⚠️  Matrix full! Level 1 completed.');
         }
 
-        console.log('=== MATRIX PLACEMENT COMPLETE ===');
+        console.log('=== GLOBAL MATRIX PLACEMENT COMPLETE ===');
     } catch (error) {
         console.error('❌ Matrix placement error:', error);
         console.error('Error stack:', error.stack);
     }
 };
 
-const creditMatrixIncome = async (userId, level) => {
+const creditGradualMatrixIncome = async (userId, placedUserId, position) => {
     try {
         const user = await User.findById(userId);
         if (!user) return;
 
-        // Auto Recycling Income Limit: 5 times (Maximum per ID)
-        if (user.matrix.cycle > 5) {
+        // Auto Recycling Income Limit: 1 time (Maximum per ID - one Time Rs 2400 total)
+        if (user.matrix.cycle > 1) {
             console.log(`⏹️ Cycle limit reached (${user.matrix.cycle}). No matrix income credited.`);
             return;
         }
 
-        const incomeAmount = 1200; // Member Income: ₹1,200
-        console.log(`💰 Crediting Matrix Level ${level} Income (Cycle ${user.matrix.cycle}) to Matrix Wallet: ₹${incomeAmount}`);
+        const placedUser = await User.findById(placedUserId);
+        const placedUserName = placedUser ? placedUser.fullname : 'Unknown';
 
-        user.wallet.matrixWallet += incomeAmount;
+        const incomeAmount = 400; // Gradual Member Income: ₹400 per placement
+        console.log(`💰 Crediting Matrix Income (Cycle ${user.matrix.cycle}, Pos ${position}) to Main Balance: ₹${incomeAmount}`);
+
+        user.wallet.balance += incomeAmount;
         user.wallet.totalEarnings += incomeAmount;
         user.wallet.matrixIncome += incomeAmount;
         await user.save();
@@ -134,42 +146,14 @@ const creditMatrixIncome = async (userId, level) => {
         await Transaction.create({
             user: userId,
             type: 'Matrix Income',
-            description: `Auto Recycling (Cycle ${user.matrix.cycle})`,
+            description: `Auto Recycling (Cycle ${user.matrix.cycle}, Position ${position} - ${placedUserName})`,
             amount: incomeAmount,
             status: 'credit'
         });
-
-        // Leadership Referral Royalty: Rs.500/- again & again
-        if (user.referredBy) {
-            const referrer = await User.findById(user.referredBy);
-            if (referrer) {
-                const royaltyAmount = 500;
-                console.log(`👑 Crediting Leadership Referral Royalty to ${referrer.fullname}: ₹${royaltyAmount}`);
-
-                referrer.wallet.balance += royaltyAmount;
-                referrer.wallet.totalEarnings += royaltyAmount;
-                referrer.wallet.royalty += royaltyAmount; // Using existing royalty field
-                await referrer.save();
-
-                await Transaction.create({
-                    user: referrer._id,
-                    type: 'Leadership',
-                    description: `Leadership Royalty from: ${user.fullname}`,
-                    amount: royaltyAmount,
-                    status: 'credit'
-                });
-
-                // Create leadership log for dedicated history
-                await Leadership.create({
-                    user: referrer._id,
-                    downlineUser: userId,
-                    amount: royaltyAmount,
-                    trigger: `Matrix Royalty: ${user.fullname}`,
-                    credited: true
-                });
-            }
-        }
     } catch (error) {
-        console.error('❌ Credit matrix income error:', error);
+        console.error('❌ Credit gradual matrix income error:', error);
     }
 };
+
+// Matrix leadership royalty has been removed in the new plan
+// (as the 1000 Rs distribution is strict: 200 Direct, 200 Bonanza, 200 Royalty, 400 Matrix)

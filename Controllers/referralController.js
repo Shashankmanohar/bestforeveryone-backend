@@ -21,7 +21,7 @@ export const getReferralCode = async (req, res) => {
 export const getUserReferrals = async (req, res) => {
     try {
         const referrals = await Referral.find({ referrer: req.user.id })
-            .populate('referred', 'fullname phone status verified createdAt')
+            .populate('referred', 'fullname email status verified createdAt')
             .sort({ createdAt: -1 });
 
         const formattedReferrals = referrals.map((ref, index) => ({
@@ -60,38 +60,31 @@ export const getWeeklyReferralStats = async (req, res) => {
             verified: true
         });
 
-        // Filter for referrals made on Mon-Fri
-        const monFriReferrals = allWeeklyReferrals.filter(ref => {
-            const day = new Date(ref.createdAt).getDay();
-            return day >= 1 && day <= 5;
-        });
-
         const weeklyCount = allWeeklyReferrals.length;
-        const monFriCount = monFriReferrals.length;
-        const bonusThreshold = 2;
-        const bonusUnlocked = monFriCount >= bonusThreshold;
         const baseReward = 200;
+        const bonanzaReward = 200;
 
-        // New tiered bonanza: ₹400 for first 2, then ₹200 for each additional
-        // Mathematically: monFriCount * 200 if monFriCount >= 2
-        const bonusEarnings = bonusUnlocked ? monFriCount * 200 : 0;
-
+        // Base reward is 200 per direct
         const baseEarnings = weeklyCount * baseReward;
+        
+        // Bonanza is 200 per direct
+        const bonusEarnings = weeklyCount * bonanzaReward;
+        
         const totalEarnings = baseEarnings + bonusEarnings;
 
         res.json({
             weekStart: weekStart.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
             weekEnd: weekEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
-            directReferrals: monFriCount, // Use Mon-Fri count for progress
+            directReferrals: weeklyCount,
             totalCount: weeklyCount,
-            weeklyCount: monFriCount,
-            bonusThreshold,
-            bonusUnlocked,
+            weeklyCount: weeklyCount,
+            bonusThreshold: 1, // Doesn't matter anymore
+            bonusUnlocked: weeklyCount > 0,
             baseEarnings,
             bonusEarnings,
             totalEarnings,
-            isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-            isBonanzaWindow: dayOfWeek >= 1 && dayOfWeek <= 5
+            isWeekend: false, // Doesn't matter anymore
+            isBonanzaWindow: true, // Always true now
         });
     } catch (error) {
         console.error(error);
@@ -142,34 +135,18 @@ export const processReferralSignup = async (referrerId, referredId) => {
             return;
         }
 
-        // 2. Base Reward: Always give ₹200
+        // 2. Base Reward: Always give ₹200 for direct referral
         const baseAmount = 200;
         await creditReferralBonus(referrer, baseAmount, referredId);
 
-        // 3. Weekly Bonanza: Tiered rewards on Mon-Fri
-        const isMonFri = dayOfWeek >= 1 && dayOfWeek <= 5;
-        if (isMonFri) {
-            const currentRefs = await Referral.find({
-                referrer: referrerId,
-                createdAt: { $gte: weekStart, $lte: weekEnd },
-                verified: true
-            });
-            const monFriRefs = currentRefs.filter(ref => {
-                const day = new Date(ref.createdAt).getDay();
-                return day >= 1 && day <= 5;
-            });
-            const count = monFriRefs.length;
-
-            if (count === 2) {
-                // For the 2nd referral, credit ₹400 (covers 1st and 2nd at ₹200 each)
-                const bonusAmount = 400;
-                await creditBonanza(referrer, bonusAmount, 'Weekly Bonanza: 2 Referrals reached', referredId);
-            } else if (count > 2) {
-                // For every referral after the 2nd, credit ₹200 each
-                const bonusAmount = 200;
-                await creditBonanza(referrer, bonusAmount, `Weekly Bonanza: Referral #${count}`, referredId);
-            }
-        }
+        // 3. Weekly Bonanza: Give ₹200 for Bonanza as per the 20% rule
+        // The user specified: Distribution of Rs. 1000/- only
+        // 1. Direct Ref. Income = 200/-
+        // 2. Weekly Bonanza = 200/-
+        // So we give an additional 200 as Bonanza instantly for the referral (or add to a pool)
+        // Since the prompt states "Weekly Bonanza-20%=200/-", we will credit it directly as Bonanza Income
+        const bonanzaAmount = 200;
+        await creditBonanza(referrer, bonanzaAmount, `Weekly Bonanza Income for Referral`, referredId);
 
         referral.rewardCredited = true;
         await referral.save();

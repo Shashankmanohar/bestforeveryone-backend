@@ -16,7 +16,7 @@ const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'best-for-everyone/kyc',
-        allowed_formats: ['jpg', 'png', 'jpeg', 'pdf'],
+        allowedFormats: ['jpg', 'png', 'jpeg', 'pdf'],
         resource_type: 'auto'
     }
 });

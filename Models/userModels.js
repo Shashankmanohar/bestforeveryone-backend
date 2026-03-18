@@ -11,9 +11,9 @@ const userModel = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    phone: {
+    email: {
       type: String,
-      required: true,
+      default: null,
     },
     password: {
       type: String,
@@ -47,7 +47,6 @@ const userModel = new mongoose.Schema(
       referralIncome: { type: Number, default: 0 },
       royalty: { type: Number, default: 0 },
       bonanzaIncome: { type: Number, default: 0 },
-      matrixWallet: { type: Number, default: 0 },
     },
     matrix: {
       level1: {
@@ -101,6 +100,8 @@ const userModel = new mongoose.Schema(
       approvedAt: { type: Date },
       rejectionReason: { type: String }
     },
+    resetPasswordOTP: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null },
   },
   {
     timestamps: true,
