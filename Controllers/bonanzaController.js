@@ -82,7 +82,7 @@ export const processBonanza = async () => {
                 await Bonanza.create({
                     user: referrerId,
                     referral: ref.referred._id,
-                    amount,
+                    amount: bonusPerHead,
                     weekStart,
                     weekEnd,
                     credited: true
@@ -93,7 +93,7 @@ export const processBonanza = async () => {
             await Transaction.create({
                 user: referrerId,
                 type: 'Weekly Bonanza',
-                description: `${refs.length} referrals × ₹${amount}`,
+                description: `${refs.length} referrals × ₹${bonusPerHead}`,
                 amount: totalBonanza,
                 status: 'credit'
             });
@@ -112,11 +112,11 @@ const getPreviousWeek = () => {
     lastMonday.setDate(now.getDate() - (now.getDay() === 0 ? 13 : now.getDay() + 6));
     lastMonday.setHours(0, 0, 0, 0);
 
-    const lastSunday = new Date(lastMonday);
-    lastSunday.setDate(lastMonday.getDate() + 6);
-    lastSunday.setHours(23, 59, 59, 999);
+    const lastFriday = new Date(lastMonday);
+    lastFriday.setDate(lastMonday.getDate() + 4);
+    lastFriday.setHours(23, 59, 59, 999);
 
-    return { weekStart: lastMonday, weekEnd: lastSunday };
+    return { weekStart: lastMonday, weekEnd: lastFriday };
 };
 
 const formatBonanzaDate = (date) => {

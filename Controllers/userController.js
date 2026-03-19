@@ -373,9 +373,7 @@ const submitKyc = async (req, res) => {
       return res.status(400).json({ message: "All bank details are required" });
     }
 
-    if (!req.files || !req.files.aadharCard || !req.files.panCard) {
-      return res.status(400).json({ message: "Both Aadhar and PAN card uploads are required" });
-    }
+    // Removed required check for Aadhar and PAN cards
 
     const user = await User.findById(userId);
     if (!user) {
@@ -387,8 +385,8 @@ const submitKyc = async (req, res) => {
     }
 
     user.kyc = {
-      aadharCard: req.files.aadharCard[0].path,
-      panCard: req.files.panCard[0].path,
+      aadharCard: req.files?.aadharCard?.[0]?.path || null,
+      panCard: req.files?.panCard?.[0]?.path || null,
       bankDetails: {
         accountNumber,
         ifscCode,
