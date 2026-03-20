@@ -40,6 +40,7 @@ const userModel = new mongoose.Schema(
     },
     wallet: {
       balance: { type: Number, default: 0 },
+      matrixWallet: { type: Number, default: 0 },
       totalEarnings: { type: Number, default: 0 },
       withdrawn: { type: Number, default: 0 },
       pending: { type: Number, default: 0 },
@@ -54,6 +55,7 @@ const userModel = new mongoose.Schema(
         filled: { type: Number, default: 0 },
       },
       cycle: { type: Number, default: 1 },
+      lastActivatedAt: { type: Date, default: Date.now },
     },
     weeklyStats: {
       withdrawalUsed: { type: Number, default: 0 },
@@ -100,6 +102,7 @@ const userModel = new mongoose.Schema(
       approvedAt: { type: Date },
       rejectionReason: { type: String }
     },
+    isReEntryPending: { type: Boolean, default: false },
     resetPasswordOTP: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
   },

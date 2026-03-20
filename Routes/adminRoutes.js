@@ -16,8 +16,11 @@ import {
   rejectPayment,
   getPendingKyc,
   approveKyc,
-  rejectKyc
+  rejectKyc,
+  getCompletedCycles
 } from "../Controllers/adminController.js";
+import { adminGetMatrixTree } from "../Controllers/matrixController.js";
+import { getRoyaltyStats } from "../Controllers/weeklyRoyaltyController.js";
 
 import { adminForgotPassword, adminResetPassword } from "../Controllers/forgotPasswordController.js";
 
@@ -66,9 +69,15 @@ router.put("/withdrawals/:id/complete", authMiddleware(), adminMarkCompleted);
 // Financial Ledger & Royalties
 router.get("/ledger", authMiddleware(), getFinancialLedger);
 router.post("/distribute-royalty", authMiddleware(), distributeWeeklyRoyalty);
+router.get("/royalty-stats", authMiddleware(), getRoyaltyStats);
+
+// Matrix Explorer
+router.get("/matrix-tree/:userId", authMiddleware(), adminGetMatrixTree);
+router.get("/matrix/completions", authMiddleware(), getCompletedCycles);
 
 // System Configuration
 router.get("/config", authMiddleware(), getSystemConfig);
 router.put("/config", authMiddleware(), updateSystemConfig);
+
 
 export default router;

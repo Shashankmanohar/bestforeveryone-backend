@@ -164,3 +164,53 @@ export const distributeWeeklyRoyalty = async (req, res) => {
         res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
+export const getRoyaltyStats = async (req, res) => {
+    try {
+        const Transaction = (await import('../Models/transactionModel.js')).default;
+        
+        // 1. Total Royalty Paid
+        const totalPaidRes = await Transaction.aggregate([
+            { $match: { type: 'Royalty', status: 'credit' } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const totalPaid = totalPaidRes.length > 0 ? totalPaidRes[0].total : 0;
+
+        // 2. Weekly Payout (last 7 days)
+        const weeklyPaidRes = await Transaction.aggregate([
+            { 
+                $match: { 
+                    type: 'Royalty', 
+                    status: 'credit',
+                    createdAt: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+                } 
+            },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const weeklyPaid = weeklyPaidRes.length > 0 ? weeklyPaidRes[0].total : 0;
+
+        // 3. Qualifier Counts
+        const allUsers = await User.find({ status: 'active', verified: true });
+        let starCount = 0;
+        let doubleStarCount = 0;
+        let superStarCount = 0;
+
+        for (const user of allUsers) {
+            const directsCount = await User.countDocuments({ referredBy: user._id, verified: true });
+            if (directsCount >= 18) superStarCount++;
+            else if (directsCount >= 12) doubleStarCount++;
+            else if (directsCount >= 6) starCount++;
+        }
+
+        res.json({
+            totalPaid,
+            weeklyPaid,
+            starCount,
+            doubleStarCount,
+            superStarCount
+        });
+    } catch (error) {
+        console.error('Error fetching royalty stats:', error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};

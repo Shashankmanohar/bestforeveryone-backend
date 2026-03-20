@@ -1,0 +1,25 @@
+﻿[dotenv@17.2.3] injecting env (15) from .env -- tip: ΓÜÖ∩╕Å  load multiple .env files with { path: ['.env.local', '.env'] }
+Connected to MongoDB
+node : TypeError: Cannot read 
+properties of null (reading 
+'username')
+At line:1 char:1
++ node verify_matrix_revert.js 
+2>&1 | Out-File -FilePath 
+output_matrix_ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~
+    + CategoryInfo          :  
+   NotSpecified: (TypeError:   
+  Cann...ing 'username'):Str   
+ ing) [], RemoteException
+    + FullyQualifiedErrorId :  
+   NativeCommandError
+ 
+    at verifyMatrixRevert (file
+:///C:/Users/shash/Downloads/be
+st-for-everyone/backend/verify_
+matrix_revert.js:16:43)
+    at process.processTicksAndR
+ejections (node:internal/proces
+s/task_queues:105:5)

@@ -28,10 +28,10 @@ export const createWithdrawalRequest = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        const balance = user.wallet.balance;
-
+        const balance = walletType === 'matrix' ? user.wallet.matrixWallet : user.wallet.balance;
+ 
         if (amount > balance) {
-            return res.status(400).json({ message: `Insufficient wallet balance` });
+            return res.status(400).json({ message: `Insufficient ${walletType} wallet balance` });
         }
 
         // Enforce KYC
@@ -58,7 +58,7 @@ export const createWithdrawalRequest = async (req, res) => {
             });
         }
 
-        // Matrix wallet has been removed, all withdrawals carry a 20% fee
+        // Both Matrix and Current wallets have 20% fee
         const adminFee = amount * 0.20;
         const netPayable = amount - adminFee;
 
@@ -69,11 +69,17 @@ export const createWithdrawalRequest = async (req, res) => {
             adminFee,
             netPayable,
             bankDetails,
-            status: 'pending'
+            status: 'pending',
+            walletType // Save the wallet type used for withdrawal
         });
 
-        // Deduct from wallet
-        user.wallet.balance -= amount;
+        // Deduct from the correct wallet
+        if (walletType === 'matrix') {
+            user.wallet.matrixWallet -= amount;
+        } else {
+            user.wallet.balance -= amount;
+        }
+
         user.wallet.pending += amount;
         user.weeklyStats.withdrawalUsed += amount;
         await user.save();
@@ -177,10 +183,14 @@ export const adminApproveWithdrawal = async (req, res) => {
 
         if (status === 'rejected') {
             withdrawal.rejectionReason = rejectionReason;
-
-            // Refund to user balance
+ 
+            // Refund to correct wallet
             const user = await User.findById(withdrawal.user);
-            user.wallet.balance += withdrawal.amount;
+            if (withdrawal.walletType === 'matrix') {
+                user.wallet.matrixWallet += withdrawal.amount;
+            } else {
+                user.wallet.balance += withdrawal.amount;
+            }
             user.wallet.pending -= withdrawal.amount;
             user.weeklyStats.withdrawalUsed -= withdrawal.amount;
             await user.save();

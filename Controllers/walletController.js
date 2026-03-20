@@ -23,11 +23,11 @@ export const getTransactionHistory = async (req, res) => {
             .limit(50);
 
         const formattedTransactions = transactions.map(tx => ({
-            id: tx._id,
+            _id: tx._id,
             type: tx.type,
-            desc: tx.description,
+            description: tx.description,
             amount: tx.amount,
-            date: formatDate(tx.createdAt),
+            createdAt: tx.createdAt,
             status: tx.status
         }));
 

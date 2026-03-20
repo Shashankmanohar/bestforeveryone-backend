@@ -10,7 +10,26 @@ export const getTotalRoyalty = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        res.json({ royalty: user.wallet.royalty });
+        // Count verified direct referrals
+        const directsCount = await User.countDocuments({ 
+            referredBy: req.user.id, 
+            verified: true 
+        });
+
+        const tiers = [
+            { label: 'Star', requirement: 6, isQualified: directsCount >= 6 },
+            { label: 'Double Star', requirement: 12, isQualified: directsCount >= 12 },
+            { label: 'Super Star', requirement: 18, isQualified: directsCount >= 18 }
+        ];
+
+        const currentTier = tiers.filter(t => t.isQualified).pop()?.label || 'None';
+
+        res.json({ 
+            royalty: user.wallet.royalty,
+            directsCount,
+            tiers,
+            currentTier
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Internal Server Error" });
@@ -24,14 +43,35 @@ export const getLeadershipLogs = async (req, res) => {
             .sort({ createdAt: -1 })
             .limit(50);
 
-        const formattedLogs = logs.map((log, index) => ({
-            id: index + 1,
+        // Also fetch transactions of type 'Royalty'
+        const royaltyTransactions = await Transaction.find({
+            user: req.user.id,
+            type: 'Royalty',
+            status: 'credit'
+        }).sort({ createdAt: -1 }).limit(50);
+
+        const formattedLeadershipLogs = logs.map((log) => ({
             amount: log.amount,
             trigger: log.trigger,
-            date: formatDate(log.createdAt)
+            date: formatDate(log.createdAt),
+            type: 'leadership'
         }));
 
-        res.json({ leadershipLogs: formattedLogs });
+        const formattedRoyaltyLogs = royaltyTransactions.map((tx) => ({
+            amount: tx.amount,
+            trigger: tx.description,
+            date: formatDate(tx.createdAt),
+            type: 'weekly_royalty'
+        }));
+
+        // Merge and sort by date (though we don't have true timestamp here, 
+        // we can just combine them or sort if we return raw dates)
+        const allLogs = [...formattedLeadershipLogs, ...formattedRoyaltyLogs]
+            .sort((a, b) => new Date(b.date) - new Date(a.date)) // This might be tricky with formatted date
+            .slice(0, 50)
+            .map((log, index) => ({ id: index + 1, ...log }));
+
+        res.json({ leadershipLogs: allLogs });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Internal Server Error" });

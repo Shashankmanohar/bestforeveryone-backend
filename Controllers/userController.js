@@ -54,15 +54,9 @@ const signupUser = async (req, res) => {
         return res.status(400).json({ message: `Invalid referral code: ${code}` });
       }
     } else {
-      // No referral code provided - find the first user (master user)
-      console.log('No referral code provided, finding master user (first user)...');
-      referrer = await User.findOne({}).sort({ createdAt: 1 });
-
-      if (referrer) {
-        console.log('Automatically assigned master user as referrer:', referrer.fullname, `(${referrer.referralCode})`);
-      } else {
-        console.log('No users in database yet. This will be the first user.');
-      }
+      // No referral code provided - do not assign a default referrer
+      console.log('No referral code provided. User will have no referrer.');
+      referrer = null;
     }
 
     console.log('Hashing password...');
@@ -274,10 +268,6 @@ const activateOtherUser = async (req, res) => {
       return res.status(404).json({ message: "Activator not found" });
     }
 
-    if (activator.wallet.balance < 1000) {
-      return res.status(400).json({ message: "Insufficient balance. You need at least ₹1000 to activate another account." });
-    }
-
     // 2. Find target user
     const targetUser = await User.findOne({ username: targetUsername });
     if (!targetUser) {
@@ -288,9 +278,17 @@ const activateOtherUser = async (req, res) => {
       return res.status(400).json({ message: "Target user is already verified" });
     }
 
+    // --- Fee Calculation ---
+    // First time = 1000, Re-entry (cycle > 1) = 1180
+    const activationFee = (targetUser.matrix && targetUser.matrix.cycle > 1) ? 1180 : 1000;
+
+    if (activator.wallet.balance < activationFee) {
+      return res.status(400).json({ message: `Insufficient balance. You need at least ₹${activationFee} to activate this account.` });
+    }
+
     // 3. Process Activation
     // Deduct from activator
-    activator.wallet.balance -= 1000;
+    activator.wallet.balance -= activationFee;
     await activator.save();
 
     // Create debit transaction for activator
@@ -298,10 +296,20 @@ const activateOtherUser = async (req, res) => {
     await Transaction.create({
       user: activator._id,
       type: 'User Activation',
-      description: `Activated account: ${targetUser.username}`,
-      amount: 1000,
+      description: `Activated account: ${targetUser.username} (${targetUser.matrix && targetUser.matrix.cycle > 1 ? 'Re-entry' : 'Initial'})`,
+      amount: activationFee,
       status: 'debit'
     });
+
+    // --- Reset Matrix for Target User ---
+    if (targetUser.matrix && targetUser.matrix.cycle > 1) {
+      console.log(`🔄 Resetting matrix for re-entering user: ${targetUser.fullname} (Cycle ${targetUser.matrix.cycle})`);
+      targetUser.matrix.level1.filled = 0;
+      targetUser.matrix.lastActivatedAt = new Date();
+    } else {
+      // First activation timestamp
+      targetUser.matrix.lastActivatedAt = new Date();
+    }
 
     // Activate target user
     targetUser.verified = true;
@@ -313,44 +321,40 @@ const activateOtherUser = async (req, res) => {
     };
     await targetUser.save();
 
-    // Create credit transaction for target user (showing payment done)
+    // Create credit transaction for target user
     await Transaction.create({
       user: targetUser._id,
       type: 'Account Activation',
       description: `Activated by: ${activator.username}`,
-      amount: 1000,
+      amount: activationFee,
       status: 'credit'
     });
 
     // 4. Trigger referral/matrix logic for target user
+    const { processReferralSignup } = await import('./referralController.js');
+    const { processMatrixPlacement } = await import('./matrixController.js');
+
     if (targetUser.referredBy) {
-      const { processReferralSignup } = await import('./referralController.js');
-      const { processMatrixPlacement } = await import('./matrixController.js');
-
-      // RESET CYCLE IF REACTIVATING
-      if (targetUser.matrix && targetUser.matrix.cycle > 5) {
-        targetUser.matrix.cycle = 1;
-        targetUser.matrix.level1.filled = 0;
-        await targetUser.save();
-      }
-
       await processReferralSignup(targetUser.referredBy, targetUser._id);
-      await processMatrixPlacement(targetUser._id, targetUser.referredBy);
     }
+    
+    // Always trigger matrix placement for global matrix
+    await processMatrixPlacement(targetUser._id, targetUser.referredBy);
 
-    // 5. Update Platform Revenue (still counts as revenue)
+    // 5. Update Platform Revenue
     const Revenue = (await import('../Models/revenueModel.js')).default;
     await Revenue.findOneAndUpdate(
       {},
       {
         $inc: {
-          totalRevenue: 1000,
-          totalJoiningFees: 1000
+          totalRevenue: activationFee,
+          totalJoiningFees: activationFee
         },
         $set: { lastUpdated: new Date() }
       },
       { upsert: true, new: true }
     );
+
 
     res.json({
       message: `User ${targetUser.username} activated successfully!`,

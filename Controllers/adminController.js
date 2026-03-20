@@ -4,6 +4,7 @@ import Transaction from "../Models/transactionModel.js";
 import Withdrawal from "../Models/withdrawalModel.js";
 import Referral from "../Models/referralModel.js";
 import Revenue from "../Models/revenueModel.js";
+import Matrix from "../Models/matrixModel.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
@@ -450,46 +451,56 @@ export const approvePayment = async (req, res) => {
     console.log('✅ [approvePayment] User saved as approved');
 
     // Process referral bonuses and matrix placement (wrapped so a failure here won't block the approval)
-    if (user.referredBy) {
-      try {
-        const { processReferralSignup } = await import('./referralController.js');
-        const { processMatrixPlacement } = await import('./matrixController.js');
+    try {
+      const { processReferralSignup } = await import('./referralController.js');
+      const { processMatrixPlacement } = await import('./matrixController.js');
 
-        // Re-fetch fresh user to avoid stale document issues
-        const freshUser = await User.findById(userId);
+      // Re-fetch fresh user to avoid stale document issues
+      const freshUser = await User.findById(userId);
 
-        // RESET CYCLE IF REACTIVATING
-        if (freshUser.matrix && freshUser.matrix.cycle > 5) {
-          console.log(`🔄 Resetting cycles for reactivated user: ${freshUser.fullname}`);
-          freshUser.matrix.cycle = 1;
-          if (freshUser.matrix.level1) {
-            freshUser.matrix.level1.filled = 0;
-          }
+      // RESET MATRIX IF REACTIVATING (Cycle > 1 means they finished at least one cycle)
+      const isReentry = freshUser.matrix && freshUser.matrix.cycle > 1;
+      
+      if (isReentry) {
+        console.log(`🔄 Resetting matrix for re-entering user: ${freshUser.fullname} (Cycle ${freshUser.matrix.cycle})`);
+        freshUser.matrix.level1.filled = 0;
+        freshUser.isReEntryPending = false;
+        freshUser.matrix.lastActivatedAt = new Date(); // Move to back of FIFO queue
+        await freshUser.save({ validateBeforeSave: false });
+      } else {
+        // Initial Activation: set first activation timestamp if not set
+        if (!freshUser.matrix.lastActivatedAt) {
+          freshUser.matrix.lastActivatedAt = new Date();
           await freshUser.save({ validateBeforeSave: false });
         }
+      }
 
+      if (freshUser.referredBy) {
         console.log('📝 [approvePayment] Processing referral signup for referrer:', user.referredBy);
         await processReferralSignup(user.referredBy, user._id);
-
-        console.log('📝 [approvePayment] Processing matrix placement for user:', user._id);
-        await processMatrixPlacement(user._id, user.referredBy);
-
-        console.log('✅ [approvePayment] Referral & matrix processing complete');
-      } catch (bonusError) {
-        // Log but don't fail the approval itself
-        console.error('⚠️ [approvePayment] Bonus/matrix processing failed (approval still succeeded):', bonusError.message);
-        console.error(bonusError.stack);
       }
+
+      console.log('📝 [approvePayment] Processing matrix placement for user:', user._id);
+      await processMatrixPlacement(user._id, user.referredBy);
+
+      console.log('✅ [approvePayment] Referral & matrix processing complete');
+    } catch (bonusError) {
+      // Log but don't fail the approval itself
+      console.error('⚠️ [approvePayment] Bonus/matrix processing failed (approval still succeeded):', bonusError.message);
+      console.error(bonusError.stack);
     }
 
     // Update Platform Revenue
-    console.log('📝 [approvePayment] Updating platform revenue...');
+    // Fee is 1180 for re-entry, 1000 for initial joining
+    const activationFee = (user.matrix && user.matrix.cycle > 1) ? 1180 : 1000;
+    
+    console.log(`📝 [approvePayment] Updating platform revenue with fee: ${activationFee}...`);
     await Revenue.findOneAndUpdate(
       {},
       {
         $inc: {
-          totalRevenue: 1000,
-          totalJoiningFees: 1000
+          totalRevenue: activationFee,
+          totalJoiningFees: activationFee
         },
         $set: { lastUpdated: new Date() }
       },
@@ -629,3 +640,43 @@ export const rejectKyc = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+export const getCompletedCycles = async (req, res) => {
+    try {
+        const users = await User.find({ "matrix.cycle": { $gt: 1 } })
+            .select('fullname username email matrix')
+            .sort({ updatedAt: -1 });
+
+        const completions = [];
+
+        for (const user of users) {
+            const completedCount = user.matrix.cycle - 1;
+            
+            for (let c = 1; c <= completedCount; c++) {
+                const lastMember = await Matrix.findOne({
+                    parent: user._id,
+                    cycle: c,
+                    position: 6,
+                    level: 1
+                }).select('createdAt');
+
+                completions.push({
+                    _id: `${user._id}_${c}`,
+                    userId: user._id,
+                    fullname: user.fullname,
+                    username: user.username,
+                    cycle: c,
+                    completedAt: lastMember ? lastMember.createdAt : user.updatedAt
+                });
+            }
+        }
+
+        completions.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+
+        res.json({ completions });
+    } catch (error) {
+        console.error('Error fetching completed cycles:', error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
