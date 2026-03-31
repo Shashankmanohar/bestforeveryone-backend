@@ -36,10 +36,12 @@ export const getUserReferrals = async (req, res) => {
         // Get milestone info
         const user = await User.findById(req.user.id).select('referralMilestones');
         const totalVerified = referrals.filter(r => r.verified && r.status === 'active').length;
+        const globalTeamCount = await getGlobalTeamCount(req.user.id);
 
         res.json({
             referrals: formattedReferrals,
             totalVerified,
+            globalTeamCount,
             milestones: user.referralMilestones
         });
     } catch (error) {
@@ -66,10 +68,10 @@ export const getWeeklyReferralStats = async (req, res) => {
 
         // Base reward is 200 per direct
         const baseEarnings = weeklyCount * baseReward;
-        
+
         // Bonanza is 200 per direct only if >= 2
         const bonusEarnings = weeklyCount >= 2 ? weeklyCount * bonanzaReward : 0;
-        
+
         const totalEarnings = baseEarnings + bonusEarnings;
 
         res.json({
@@ -266,4 +268,16 @@ const getRelativeTime = (date) => {
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     return new Date(date).toLocaleDateString();
+};
+ 
+// ─── Helper: Count verified global downline (all levels recursive) ───────────
+const getGlobalTeamCount = async (userId) => {
+    const directReferrals = await User.find({ referredBy: userId, verified: true });
+    let count = directReferrals.length;
+ 
+    for (const referral of directReferrals) {
+        count += await getGlobalTeamCount(referral._id);
+    }
+ 
+    return count;
 };

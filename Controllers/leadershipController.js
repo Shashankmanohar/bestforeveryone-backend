@@ -10,23 +10,31 @@ export const getTotalRoyalty = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Count verified direct referrals
-        const directsCount = await User.countDocuments({ 
-            referredBy: req.user.id, 
-            verified: true 
+        // Count verified direct referrals (Level 1 only)
+        const directsCount = await User.countDocuments({
+            referredBy: req.user.id,
+            verified: true
         });
 
+        // Count global team (all levels recursively)
+        const globalTeamCount = await getGlobalTeamCount(req.user.id);
+
+        // Get level-wise breakdown
+        const levelStats = await getLevelWiseDownline(req.user.id);
+
         const tiers = [
-            { label: 'Star', requirement: 6, isQualified: directsCount >= 6 },
-            { label: 'Double Star', requirement: 12, isQualified: directsCount >= 12 },
-            { label: 'Super Star', requirement: 18, isQualified: directsCount >= 18 }
+            { label: 'Star Pool', requirement: 6, isQualified: globalTeamCount >= 6, percentage: '3%' },
+            { label: 'Double Star', requirement: 12, isQualified: globalTeamCount >= 12, percentage: '6%' },
+            { label: 'Super Star', requirement: 18, isQualified: globalTeamCount >= 18, percentage: '11%' }
         ];
 
         const currentTier = tiers.filter(t => t.isQualified).pop()?.label || 'None';
 
-        res.json({ 
+        res.json({
             royalty: user.wallet.royalty,
             directsCount,
+            globalTeamCount,
+            levelStats,
             tiers,
             currentTier
         });
@@ -157,6 +165,31 @@ const getDownlineCountRecursive = async (userId) => {
     }
 
     return count;
+};
+
+// Count only verified global team members (all levels recursively)
+const getGlobalTeamCount = async (userId) => {
+    const directReferrals = await User.find({ referredBy: userId, verified: true });
+    let count = directReferrals.length;
+
+    for (const referral of directReferrals) {
+        count += await getGlobalTeamCount(referral._id);
+    }
+
+    return count;
+};
+
+// Get level-wise breakdown of verified downline
+const getLevelWiseDownline = async (userId, level = 1, levelCounts = {}) => {
+    const verifiedDirects = await User.find({ referredBy: userId, verified: true }).select('_id');
+    if (verifiedDirects.length === 0) return levelCounts;
+
+    levelCounts[level] = (levelCounts[level] || 0) + verifiedDirects.length;
+
+    for (const child of verifiedDirects) {
+        await getLevelWiseDownline(child._id, level + 1, levelCounts);
+    }
+    return levelCounts;
 };
 
 const formatDate = (date) => {
