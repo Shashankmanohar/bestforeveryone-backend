@@ -269,15 +269,15 @@ const getRelativeTime = (date) => {
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     return new Date(date).toLocaleDateString();
 };
- 
+
 // ─── Helper: Count verified global downline (all levels recursive) ───────────
 const getGlobalTeamCount = async (userId) => {
     const directReferrals = await User.find({ referredBy: userId, verified: true });
     let count = directReferrals.length;
- 
+
     for (const referral of directReferrals) {
         count += await getGlobalTeamCount(referral._id);
     }
- 
+
     return count;
 };

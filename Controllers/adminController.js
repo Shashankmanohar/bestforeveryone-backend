@@ -665,6 +665,7 @@ export const getCompletedCycles = async (req, res) => {
                     userId: user._id,
                     fullname: user.fullname,
                     username: user.username,
+                    email: user.email,
                     cycle: c,
                     completedAt: lastMember ? lastMember.createdAt : user.updatedAt
                 });

@@ -176,3 +176,98 @@ export const useEpin = async (req, res) => {
         res.status(500).json({ message: error.message || "Internal Server Error" });
     }
 };
+
+// Admin Functions
+export const adminCreateEpins = async (req, res) => {
+    try {
+        const { count, amount } = req.body;
+        const pinCount = parseInt(count) || 1;
+        const pinAmount = parseFloat(amount) || 1357;
+
+        if (pinCount > 100) {
+            return res.status(400).json({ message: "Cannot generate more than 100 pins at once" });
+        }
+
+        const pins = [];
+        for (let i = 0; i < pinCount; i++) {
+            const pinCode = await generatePin();
+            pins.push({
+                pin: pinCode,
+                owner: req.user.id, // Admin is the initial owner
+                amount: pinAmount,
+            });
+        }
+
+        const createdPins = await Epin.insertMany(pins);
+
+        res.status(201).json({
+            message: `${pinCount} E-pins generated successfully`,
+            pins: createdPins,
+        });
+    } catch (error) {
+        console.error("Admin Create E-pins error:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const adminGetAllEpins = async (req, res) => {
+    try {
+        const epins = await Epin.find()
+            .populate("owner", "username fullname")
+            .populate("usedBy", "username fullname")
+            .sort({ createdAt: -1 });
+        res.json({ epins });
+    } catch (error) {
+        console.error("Admin Get All Epins error:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const adminAssignEpin = async (req, res) => {
+    try {
+        const { pinIds, targetUsername } = req.body;
+
+        if (!pinIds || !Array.isArray(pinIds) || pinIds.length === 0) {
+            return res.status(400).json({ message: "No E-pin IDs provided" });
+        }
+
+        const targetUser = await User.findOne({ username: targetUsername });
+        if (!targetUser) {
+            return res.status(404).json({ message: "Target user not found" });
+        }
+
+        // Only update pins that are currently active
+        const result = await Epin.updateMany(
+            { _id: { $in: pinIds }, status: "active" },
+            { $set: { owner: targetUser._id } }
+        );
+
+        res.json({
+            message: `${result.modifiedCount} E-pins assigned to ${targetUser.username} successfully`,
+            totalRequested: pinIds.length,
+            assignedCount: result.modifiedCount
+        });
+    } catch (error) {
+        console.error("Admin Bulk Assign E-pin error:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const adminGetEpinStats = async (req, res) => {
+    try {
+        const total = await Epin.countDocuments();
+        const used = await Epin.countDocuments({ status: "used" });
+        const active = await Epin.countDocuments({ status: "active" });
+
+        res.json({
+            stats: {
+                total,
+                used,
+                active,
+            }
+        });
+    } catch (error) {
+        console.error("Admin E-pin Stats error:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};

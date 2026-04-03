@@ -171,6 +171,7 @@ const signinUser = async (req, res) => {
         status: user.status,
         verified: user.verified,
         paymentStatus: user.paymentStatus,
+        isReEntryPending: user.isReEntryPending,
         kyc: user.kyc
       },
       token,
@@ -208,6 +209,7 @@ const getUserProfile = async (req, res) => {
         status: user.status,
         verified: user.verified,
         paymentStatus: user.paymentStatus,
+        isReEntryPending: user.isReEntryPending,
         kyc: user.kyc,
         createdAt: user.createdAt
       }

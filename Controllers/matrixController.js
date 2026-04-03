@@ -158,9 +158,7 @@ export const processMatrixPlacement = async (userId, referrerId) => {
             await creditCompleteMatrixIncome(parent._id);
 
             // Deactivate for Re-entry (One Time per activation)
-            console.log(`⚠️ User ${parent.fullname} has completed a matrix cycle. Deactivating for re-entry (₹1180).`);
-            parent.verified = false;
-            parent.paymentStatus = 'pending';
+            console.log(`⚠️ User ${parent.fullname} has completed a matrix cycle. Setting isReEntryPending to true.`);
             parent.isReEntryPending = true;
             
             await parent.save();
@@ -235,6 +233,40 @@ export const getMatrixHistory = async (req, res) => {
         res.json({ history });
     } catch (error) {
         console.error('Error fetching matrix history:', error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+export const submitReEntryPayment = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (!user.isReEntryPending) {
+            return res.status(400).json({ message: "No re-entry pending for this user" });
+        }
+
+        if (user.paymentStatus === 'submitted') {
+            return res.status(400).json({ message: "Re-entry payment already submitted" });
+        }
+
+        user.paymentStatus = 'submitted';
+        if (!user.paymentProof) {
+            user.paymentProof = {};
+        }
+        user.paymentProof.submittedAt = new Date();
+        await user.save();
+
+        res.json({ 
+            message: "Re-entry payment submitted successfully. Waiting for admin approval.",
+            paymentStatus: user.paymentStatus
+        });
+    } catch (error) {
+        console.error('Error submitting re-entry:', error);
         res.status(500).json({ message: "Internal Server Error" });
     }
 };

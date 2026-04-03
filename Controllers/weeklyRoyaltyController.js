@@ -6,12 +6,12 @@ import Revenue from '../Models/revenueModel.js';
  * Distributes Weekly Royalty Bonus
  * Calculation:
  * - 200 Rs per new active ID (verified users) since the last distribution
- * - Star Pool (3% = 30 Rs/ID)        -> Users with Global Team >= 6 and < 12
- * - Double Star Pool (6% = 60 Rs/ID)  -> Users with Global Team >= 12 and < 18
- * - Super Star Pool (11% = 110 Rs/ID) -> Users with Global Team >= 18
- * Global Team: Count of all verified downline members across all levels.
+ * - Star Pool (3% = 30 Rs/ID)        -> Users with Direct Referrals >= 6
+ * - Double Star Pool (6% = 60 Rs/ID)  -> Users with Direct Referrals >= 18 (6 + 12 next)
+ * - Super Star Pool (11% = 110 Rs/ID) -> Users with Direct Referrals >= 36 (18 + 18 next)
+ * 
  * Note: Accumulative - An achiever gets a share from EVERY pool they have qualified for.
- * Star: >= 6 (3%), Double Star: >= 12 (6%), Super Star: >= 18 (11%). 
+ * Star: >= 6 (3%), Double Star: >= 18 (6%), Super Star: >= 36 (11%). 
  * A Super Star gets (3% + 6% + 11% = 20% total).
  */
 export const distributeWeeklyRoyalty = async (req, res) => {
@@ -40,7 +40,7 @@ export const distributeWeeklyRoyalty = async (req, res) => {
         // 2. Get the date of the last royalty distribution
         const revenueData = await Revenue.findOne({});
         const lastDistributionDate = revenueData?.lastRoyaltyDistribution || new Date(0);
-        
+
         console.log(`Calculating payouts for ids verified after: ${lastDistributionDate}`);
 
         // 3. Count new verified users (activations) since last distribution
@@ -52,7 +52,7 @@ export const distributeWeeklyRoyalty = async (req, res) => {
         console.log(`Processing ${newActivationsCount} new activations for this royalty cycle.`);
 
         if (newActivationsCount === 0) {
-            return res.status(200).json({ 
+            return res.status(200).json({
                 success: true,
                 message: "No new activations found since the last distribution.",
                 newActivations: 0
@@ -70,22 +70,22 @@ export const distributeWeeklyRoyalty = async (req, res) => {
         // 4. Find all Active Users and calculate their rankings
         // We find all verified users and check their global team count
         const allUsers = await User.find({ status: 'active', verified: true });
-        
+
         const starAchievers = [];
         const doubleStarAchievers = [];
         const superStarAchievers = [];
 
         for (const user of allUsers) {
-            const globalTeamCount = await getGlobalTeamCount(user._id);
-            
+            const directReferralCount = await User.countDocuments({ referredBy: user._id, verified: true });
+
             // Accumulative Logic (Users can belong to multiple pools)
-            if (globalTeamCount >= 6) {
+            if (directReferralCount >= 6) {
                 starAchievers.push(user);
             }
-            if (globalTeamCount >= 12) {
+            if (directReferralCount >= 18) {
                 doubleStarAchievers.push(user);
             }
-            if (globalTeamCount >= 18) {
+            if (directReferralCount >= 36) {
                 superStarAchievers.push(user);
             }
         }
@@ -225,10 +225,10 @@ export const getRoyaltyStats = async (req, res) => {
         let superStarCount = 0;
 
         for (const user of allUsers) {
-            const globalTeamCount = await getGlobalTeamCount(user._id);
-            if (globalTeamCount >= 6) starCount++;
-            if (globalTeamCount >= 12) doubleStarCount++;
-            if (globalTeamCount >= 18) superStarCount++;
+            const directReferralCount = await User.countDocuments({ referredBy: user._id, verified: true });
+            if (directReferralCount >= 6) starCount++;
+            if (directReferralCount >= 18) doubleStarCount++;
+            if (directReferralCount >= 36) superStarCount++;
         }
 
         res.json({
@@ -244,14 +244,7 @@ export const getRoyaltyStats = async (req, res) => {
     }
 };
 
-// ─── Helper: Count verified global downline (all levels recursive) ───────────
-const getGlobalTeamCount = async (userId) => {
-    const directReferrals = await User.find({ referredBy: userId, verified: true });
-    let count = directReferrals.length;
-
-    for (const referral of directReferrals) {
-        count += await getGlobalTeamCount(referral._id);
-    }
-
-    return count;
+// ─── Helper: Count verified direct referrals ───────────
+const getDirectReferralCount = async (userId) => {
+    return await User.countDocuments({ referredBy: userId, verified: true });
 };

@@ -2,7 +2,7 @@ import express from 'express';
 import { signupUser, signinUser, getUserProfile, submitPaymentProof, activateOtherUser, submitKyc, changePassword } from '../Controllers/userController.js';
 import { userForgotPassword, userResetPassword } from '../Controllers/forgotPasswordController.js';
 import { getWalletBalance, getTransactionHistory, getEarningsBreakdown } from '../Controllers/walletController.js';
-import { getMatrixStatus, getMatrixTree, getMatrixHistory } from '../Controllers/matrixController.js';
+import { getMatrixStatus, getMatrixTree, getMatrixHistory, submitReEntryPayment } from '../Controllers/matrixController.js';
 import { getReferralCode, getUserReferrals, getWeeklyReferralStats } from '../Controllers/referralController.js';
 import { createWithdrawalRequest, getWithdrawalHistory, getWithdrawalLimits } from '../Controllers/withdrawalController.js';
 import { getWeeklyBonanza, getBonanzaLogs } from '../Controllers/bonanzaController.js';
@@ -42,6 +42,7 @@ router.get('/wallet/breakdown', authMiddleware(['user']), getEarningsBreakdown);
 router.get('/matrix', authMiddleware(['user']), getMatrixStatus);
 router.get('/matrix/tree', authMiddleware(['user']), getMatrixTree);
 router.get('/matrix/history', authMiddleware(['user']), getMatrixHistory);
+router.post('/matrix/re-entry', authMiddleware(['user']), submitReEntryPayment);
 
 // Referral routes
 router.get('/referral/code', authMiddleware(['user']), getReferralCode);

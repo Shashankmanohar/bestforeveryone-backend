@@ -22,6 +22,13 @@ import {
 import { adminGetMatrixTree } from "../Controllers/matrixController.js";
 import { getRoyaltyStats } from "../Controllers/weeklyRoyaltyController.js";
 
+import {
+  adminCreateEpins,
+  adminGetAllEpins,
+  adminAssignEpin,
+  adminGetEpinStats
+} from "../Controllers/epinController.js";
+
 import { adminForgotPassword, adminResetPassword } from "../Controllers/forgotPasswordController.js";
 
 import {
@@ -74,6 +81,12 @@ router.get("/royalty-stats", authMiddleware(), getRoyaltyStats);
 // Matrix Explorer
 router.get("/matrix-tree/:userId", authMiddleware(), adminGetMatrixTree);
 router.get("/matrix/completions", authMiddleware(), getCompletedCycles);
+
+// E-pin Management
+router.post("/epin/generate", authMiddleware(), adminCreateEpins);
+router.get("/epin/list", authMiddleware(), adminGetAllEpins);
+router.post("/epin/assign", authMiddleware(), adminAssignEpin);
+router.get("/epin/stats", authMiddleware(), adminGetEpinStats);
 
 // System Configuration
 router.get("/config", authMiddleware(), getSystemConfig);
