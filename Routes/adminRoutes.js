@@ -17,6 +17,7 @@ import {
   getPendingKyc,
   approveKyc,
   rejectKyc,
+  adminUpdateKycBankDetails,
   getCompletedCycles
 } from "../Controllers/adminController.js";
 import { adminGetMatrixTree } from "../Controllers/matrixController.js";
@@ -67,6 +68,7 @@ router.put("/payment/reject/:userId", authMiddleware(), rejectPayment);
 router.get("/kyc/pending", authMiddleware(), getPendingKyc);
 router.put("/kyc/approve/:userId", authMiddleware(), approveKyc);
 router.put("/kyc/reject/:userId", authMiddleware(), rejectKyc);
+router.patch("/kyc/:userId/bank-details", authMiddleware(), adminUpdateKycBankDetails);
 
 // Withdrawals
 router.get("/withdrawals", authMiddleware(), adminGetAllWithdrawals);

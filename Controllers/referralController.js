@@ -137,6 +137,8 @@ export const processReferralSignup = async (referrerId, referredId) => {
             return;
         }
 
+        console.log(`Giving rewards for user activation (User: ${referredId})...`);
+        
         // 2. Base Reward: Always give ₹200 for direct referral
         const baseAmount = 200;
         await creditReferralBonus(referrer, baseAmount, referredId);

@@ -127,6 +127,7 @@ export const useEpin = async (req, res) => {
         // Activate target user
         targetUser.verified = true;
         targetUser.paymentStatus = "approved";
+        targetUser.matrix.lastActivatedAt = new Date(); // Set activation time for FIFO
         targetUser.paymentProof = {
             ...targetUser.paymentProof,
             approvedAt: new Date(),
@@ -144,19 +145,30 @@ export const useEpin = async (req, res) => {
         });
 
         // 4. Trigger referral/matrix logic
-        if (targetUser.referredBy) {
-            const { processReferralSignup } = await import("./referralController.js");
-            const { processMatrixPlacement } = await import("./matrixController.js");
+        const { processReferralSignup } = await import("./referralController.js");
+        const { processMatrixPlacement } = await import("./matrixController.js");
 
-            if (targetUser.matrix && targetUser.matrix.cycle > 5) {
-                targetUser.matrix.cycle = 1;
-                targetUser.matrix.level1.filled = 0;
-                await targetUser.save();
+        // RESET MATRIX IF REACTIVATING (Re-entry)
+        const isReentry = targetUser.isReEntryPending || (targetUser.matrix && (targetUser.matrix.isReEntryPending || targetUser.matrix.cycle > 1));
+
+        if (isReentry) {
+            console.log(`🔄 Resetting matrix for re-entering user: ${targetUser.fullname}`);
+            targetUser.matrix.level1.filled = 0;
+            targetUser.isReEntryPending = false;
+            if (targetUser.matrix) {
+                targetUser.matrix.isReEntryPending = false;
             }
-
-            await processReferralSignup(targetUser.referredBy, targetUser._id);
-            await processMatrixPlacement(targetUser._id, targetUser.referredBy);
+            targetUser.matrix.lastActivatedAt = new Date(); // Move to back of FIFO queue
+            await targetUser.save();
         }
+
+        if (targetUser.referredBy) {
+            console.log('📝 [useEpin] Processing referral signup for referrer:', targetUser.referredBy);
+            await processReferralSignup(targetUser.referredBy, targetUser._id);
+        }
+
+        console.log('📝 [useEpin] Processing matrix placement for user:', targetUser._id);
+        await processMatrixPlacement(targetUser._id, targetUser.referredBy);
 
         // 5. Update Platform Revenue (counted when E-pin was BOUGHT would be double counting if we count here too? 
         // Usually revenue is counted at the moment money enters the system. 

@@ -84,7 +84,7 @@ const signupUser = async (req, res) => {
       password: hashedPassword,
       referralCode: newReferralCode,
       referredBy: referrer ? referrer._id : null,
-      verified: false, // Require payment verification
+      verified: false, // REQUIRES PAYMENT AGAIN
       paymentStatus: 'pending'
     });
     console.log('User created successfully:', user._id);
@@ -117,6 +117,7 @@ const signupUser = async (req, res) => {
         matrix: user.matrix,
         verified: user.verified,
         paymentStatus: user.paymentStatus,
+        status: user.status || 'active',
         kyc: user.kyc
       },
       token,
@@ -239,9 +240,14 @@ const submitPaymentProof = async (req, res) => {
       return res.status(400).json({ message: "Payment already approved" });
     }
 
-    // Update payment status
+    // Update payment status and set FIFO activation timestamp
     user.paymentStatus = 'submitted';
     user.paymentProof.submittedAt = new Date();
+    
+    // Set lastActivatedAt at submission time so FIFO depends on when they clicked "Done"
+    if (!user.matrix) user.matrix = {};
+    user.matrix.lastActivatedAt = new Date();
+    
     await user.save();
 
     res.json({
@@ -281,8 +287,8 @@ const activateOtherUser = async (req, res) => {
     }
 
     // --- Fee Calculation ---
-    // First time = 1000, Re-entry (cycle > 1) = 1180
-    const activationFee = (targetUser.matrix && targetUser.matrix.cycle > 1) ? 1180 : 1000;
+    // First time = 1180 (Admin Charge Waived), Re-entry (cycle > 1) = 1357 (Inc. Admin Charge)
+    const activationFee = (targetUser.matrix && targetUser.matrix.cycle > 1) ? 1357 : 1180;
 
     if (activator.wallet.balance < activationFee) {
       return res.status(400).json({ message: `Insufficient balance. You need at least ₹${activationFee} to activate this account.` });
@@ -304,10 +310,16 @@ const activateOtherUser = async (req, res) => {
     });
 
     // --- Reset Matrix for Target User ---
-    if (targetUser.matrix && targetUser.matrix.cycle > 1) {
+    const isReentry = targetUser.isReEntryPending || (targetUser.matrix && (targetUser.matrix.isReEntryPending || targetUser.matrix.cycle > 1));
+
+    if (isReentry) {
       console.log(`🔄 Resetting matrix for re-entering user: ${targetUser.fullname} (Cycle ${targetUser.matrix.cycle})`);
       targetUser.matrix.level1.filled = 0;
-      targetUser.matrix.lastActivatedAt = new Date();
+      targetUser.isReEntryPending = false;
+      if (targetUser.matrix) {
+        targetUser.matrix.isReEntryPending = false;
+      }
+      targetUser.matrix.lastActivatedAt = new Date(); // Move to back of FIFO queue
     } else {
       // First activation timestamp
       targetUser.matrix.lastActivatedAt = new Date();
@@ -339,7 +351,7 @@ const activateOtherUser = async (req, res) => {
     if (targetUser.referredBy) {
       await processReferralSignup(targetUser.referredBy, targetUser._id);
     }
-    
+
     // Always trigger matrix placement for global matrix
     await processMatrixPlacement(targetUser._id, targetUser.referredBy);
 

@@ -12,8 +12,21 @@ import Revenue from '../Models/revenueModel.js';
  * 
  * Note: Accumulative - An achiever gets a share from EVERY pool they have qualified for.
  * Star: >= 6 (3%), Double Star: >= 18 (6%), Super Star: >= 36 (11%). 
+ * Note: Accumulative - An achiever gets a share from EVERY pool they have qualified for.
+ * Star: >= 6 (3%), Double Star: >= 18 (6%), Super Star: >= 36 (11%). 
  * A Super Star gets (3% + 6% + 11% = 20% total).
+ * 
+ * Earning Caps:
+ * - Star: ₹10,000 total royalty
+ * - Double Star: ₹50,000 total royalty
+ * - Super Star: ₹1,00,000 total royalty
  */
+const ROYALTY_CAPS = {
+    STAR: 10000,
+    DOUBLE_STAR: 50000,
+    SUPER_STAR: 100000
+};
+
 export const distributeWeeklyRoyalty = async (req, res) => {
     try {
         console.log('=== STARTING WEEKLY ROYALTY DISTRIBUTION ===');
@@ -105,60 +118,90 @@ export const distributeWeeklyRoyalty = async (req, res) => {
         if (starPayoutPerUser > 0) {
             console.log(`Distributing ₹${starPayoutPerUser} to ${starAchievers.length} Star achievers...`);
             for (const user of starAchievers) {
-                user.wallet.balance += starPayoutPerUser;
-                user.wallet.totalEarnings += starPayoutPerUser;
-                user.wallet.royalty += starPayoutPerUser;
+                const currentRoyalty = user.wallet?.royalty || 0;
+                const availableRoom = ROYALTY_CAPS.STAR - currentRoyalty;
+
+                if (availableRoom <= 0) {
+                    console.log(`User ${user.username} reached Star royalty cap. Skipping.`);
+                    continue;
+                }
+
+                const finalPayout = Math.min(starPayoutPerUser, availableRoom);
+
+                user.wallet.balance += finalPayout;
+                user.wallet.totalEarnings += finalPayout;
+                user.wallet.royalty = (user.wallet.royalty || 0) + finalPayout;
                 await user.save({ validateBeforeSave: false });
 
                 await Transaction.create({
                     user: user._id,
                     type: 'Royalty',
-                    description: `Weekly Royalty Bonus (Star Pool - 3%)`,
-                    amount: starPayoutPerUser,
+                    description: `Weekly Royalty Bonus (Star Pool - 3%)${finalPayout < starPayoutPerUser ? ' [CAP REACHED]' : ''}`,
+                    amount: finalPayout,
                     status: 'credit'
                 });
             }
-            payouts.push(`Paid ₹${starPayoutPerUser} to ${starAchievers.length} Star achievers.`);
+            payouts.push(`Paid to ${starAchievers.length} Star achievers (subject to ₹10k cap).`);
         }
 
         // 7. Distribute to Double Star Achievers
         if (doubleStarPayoutPerUser > 0) {
             console.log(`Distributing ₹${doubleStarPayoutPerUser} to ${doubleStarAchievers.length} Double Star achievers...`);
             for (const user of doubleStarAchievers) {
-                user.wallet.balance += doubleStarPayoutPerUser;
-                user.wallet.totalEarnings += doubleStarPayoutPerUser;
-                user.wallet.royalty += doubleStarPayoutPerUser;
+                const currentRoyalty = user.wallet?.royalty || 0;
+                const availableRoom = ROYALTY_CAPS.DOUBLE_STAR - currentRoyalty;
+
+                if (availableRoom <= 0) {
+                    console.log(`User ${user.username} reached Double Star royalty cap. Skipping.`);
+                    continue;
+                }
+
+                const finalPayout = Math.min(doubleStarPayoutPerUser, availableRoom);
+
+                user.wallet.balance += finalPayout;
+                user.wallet.totalEarnings += finalPayout;
+                user.wallet.royalty = (user.wallet.royalty || 0) + finalPayout;
                 await user.save({ validateBeforeSave: false });
 
                 await Transaction.create({
                     user: user._id,
                     type: 'Royalty',
-                    description: `Weekly Royalty Bonus (Double Star Pool - 6%)`,
-                    amount: doubleStarPayoutPerUser,
+                    description: `Weekly Royalty Bonus (Double Star Pool - 6%)${finalPayout < doubleStarPayoutPerUser ? ' [CAP REACHED]' : ''}`,
+                    amount: finalPayout,
                     status: 'credit'
                 });
             }
-            payouts.push(`Paid ₹${doubleStarPayoutPerUser} to ${doubleStarAchievers.length} Double Star achievers.`);
+            payouts.push(`Paid to ${doubleStarAchievers.length} Double Star achievers (subject to ₹50k cap).`);
         }
 
         // 8. Distribute to Super Star Achievers
         if (superStarPayoutPerUser > 0) {
             console.log(`Distributing ₹${superStarPayoutPerUser} to ${superStarAchievers.length} Super Star achievers...`);
             for (const user of superStarAchievers) {
-                user.wallet.balance += superStarPayoutPerUser;
-                user.wallet.totalEarnings += superStarPayoutPerUser;
-                user.wallet.royalty += superStarPayoutPerUser;
+                const currentRoyalty = user.wallet?.royalty || 0;
+                const availableRoom = ROYALTY_CAPS.SUPER_STAR - currentRoyalty;
+
+                if (availableRoom <= 0) {
+                    console.log(`User ${user.username} reached Super Star royalty cap. Skipping.`);
+                    continue;
+                }
+
+                const finalPayout = Math.min(superStarPayoutPerUser, availableRoom);
+
+                user.wallet.balance += finalPayout;
+                user.wallet.totalEarnings += finalPayout;
+                user.wallet.royalty = (user.wallet.royalty || 0) + finalPayout;
                 await user.save({ validateBeforeSave: false });
 
                 await Transaction.create({
                     user: user._id,
                     type: 'Royalty',
-                    description: `Weekly Royalty Bonus (Super Star Pool - 11%)`,
-                    amount: superStarPayoutPerUser,
+                    description: `Weekly Royalty Bonus (Super Star Pool - 11%)${finalPayout < superStarPayoutPerUser ? ' [CAP REACHED]' : ''}`,
+                    amount: finalPayout,
                     status: 'credit'
                 });
             }
-            payouts.push(`Paid ₹${superStarPayoutPerUser} to ${superStarAchievers.length} Super Star achievers.`);
+            payouts.push(`Paid to ${superStarAchievers.length} Super Star achievers (subject to ₹100k cap).`);
         }
 
         // 9. Update last distribution date in Revenue

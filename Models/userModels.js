@@ -55,7 +55,8 @@ const userModel = new mongoose.Schema(
         filled: { type: Number, default: 0 },
       },
       cycle: { type: Number, default: 1 },
-      lastActivatedAt: { type: Date, default: Date.now },
+      lastActivatedAt: { type: Date, default: null },
+      isReEntryPending: { type: Boolean, default: false }, // Legacy location
     },
     weeklyStats: {
       withdrawalUsed: { type: Number, default: 0 },

@@ -458,21 +458,30 @@ export const approvePayment = async (req, res) => {
       // Re-fetch fresh user to avoid stale document issues
       const freshUser = await User.findById(userId);
 
-      // RESET MATRIX IF REACTIVATING (Cycle > 1 means they finished at least one cycle)
-      const isReentry = freshUser.matrix && freshUser.matrix.cycle > 1;
-      
+      // RESET MATRIX IF REACTIVATING (Re-entry)
+      const isReentry = freshUser.isReEntryPending || (freshUser.matrix && (freshUser.matrix.isReEntryPending || freshUser.matrix.cycle > 1));
+
       if (isReentry) {
         console.log(`🔄 Resetting matrix for re-entering user: ${freshUser.fullname} (Cycle ${freshUser.matrix.cycle})`);
         freshUser.matrix.level1.filled = 0;
         freshUser.isReEntryPending = false;
-        freshUser.matrix.lastActivatedAt = new Date(); // Move to back of FIFO queue
-        await freshUser.save({ validateBeforeSave: false });
-      } else {
-        // Initial Activation: set first activation timestamp if not set
+        if (freshUser.matrix) {
+          freshUser.matrix.isReEntryPending = false; // Clear both potential locations
+        }
+        // PRESERVE submission timestamp if it exists, otherwise set to now
         if (!freshUser.matrix.lastActivatedAt) {
           freshUser.matrix.lastActivatedAt = new Date();
-          await freshUser.save({ validateBeforeSave: false });
         }
+        await freshUser.save({ validateBeforeSave: false });
+      } else {
+        // Initial Activation or Reactivation: preserve submission timestamp if it exists
+        console.log(`🚀 Activating user matrix: ${freshUser.fullname}`);
+        if (!freshUser.matrix.lastActivatedAt) {
+          freshUser.matrix.lastActivatedAt = new Date();
+        }
+        freshUser.isReEntryPending = false; // Just in case
+        if (freshUser.matrix) freshUser.matrix.isReEntryPending = false;
+        await freshUser.save({ validateBeforeSave: false });
       }
 
       if (freshUser.referredBy) {
@@ -493,7 +502,7 @@ export const approvePayment = async (req, res) => {
     // Update Platform Revenue
     // Fee is 1180 for re-entry, 1000 for initial joining
     const activationFee = (user.matrix && user.matrix.cycle > 1) ? 1180 : 1000;
-    
+
     console.log(`📝 [approvePayment] Updating platform revenue with fee: ${activationFee}...`);
     await Revenue.findOneAndUpdate(
       {},
@@ -564,8 +573,14 @@ export const rejectPayment = async (req, res) => {
 // ===== KYC MANAGEMENT =====
 export const getPendingKyc = async (req, res) => {
   try {
-    // Show all users who have submitted KYC (since they are auto-approved now)
-    const kycUsers = await User.find({ 'kyc.status': 'approved' })
+    const { status } = req.query;
+
+    // Build filter: if status param provided filter by it, otherwise get all submitted KYC
+    const filter = status
+      ? { 'kyc.status': status }
+      : { 'kyc.status': { $in: ['pending', 'approved', 'rejected'] } };
+
+    const kycUsers = await User.find(filter)
       .select('fullname username email kyc createdAt')
       .sort({ 'kyc.submittedAt': -1 });
 
@@ -641,43 +656,76 @@ export const rejectKyc = async (req, res) => {
   }
 };
 
-export const getCompletedCycles = async (req, res) => {
-    try {
-        const users = await User.find({ "matrix.cycle": { $gt: 1 } })
-            .select('fullname username email matrix')
-            .sort({ updatedAt: -1 });
+// Admin edits bank details in a user's KYC record
+export const adminUpdateKycBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { accountNumber, ifscCode, accountHolderName, bankName } = req.body;
 
-        const completions = [];
-
-        for (const user of users) {
-            const completedCount = user.matrix.cycle - 1;
-            
-            for (let c = 1; c <= completedCount; c++) {
-                const lastMember = await Matrix.findOne({
-                    parent: user._id,
-                    cycle: c,
-                    position: 6,
-                    level: 1
-                }).select('createdAt');
-
-                completions.push({
-                    _id: `${user._id}_${c}`,
-                    userId: user._id,
-                    fullname: user.fullname,
-                    username: user.username,
-                    email: user.email,
-                    cycle: c,
-                    completedAt: lastMember ? lastMember.createdAt : user.updatedAt
-                });
-            }
-        }
-
-        completions.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-
-        res.json({ completions });
-    } catch (error) {
-        console.error('Error fetching completed cycles:', error);
-        res.status(500).json({ message: "Internal Server Error" });
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    if (!user.kyc) user.kyc = {};
+    if (!user.kyc.bankDetails) user.kyc.bankDetails = {};
+
+    if (accountNumber !== undefined) user.kyc.bankDetails.accountNumber = accountNumber;
+    if (ifscCode !== undefined) user.kyc.bankDetails.ifscCode = ifscCode;
+    if (accountHolderName !== undefined) user.kyc.bankDetails.accountHolderName = accountHolderName;
+    if (bankName !== undefined) user.kyc.bankDetails.bankName = bankName;
+
+    await user.save();
+
+    res.json({
+      message: "KYC bank details updated successfully",
+      bankDetails: user.kyc.bankDetails
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
+
+export const getCompletedCycles = async (req, res) => {
+  try {
+    const users = await User.find({ "matrix.cycle": { $gt: 1 } })
+      .select('fullname username email matrix')
+      .sort({ updatedAt: -1 });
+
+    const completions = [];
+
+    for (const user of users) {
+      const completedCount = user.matrix.cycle - 1;
+
+      for (let c = 1; c <= completedCount; c++) {
+        const lastMember = await Matrix.findOne({
+          parent: user._id,
+          cycle: c,
+          position: 6,
+          level: 1
+        }).select('createdAt');
+
+        completions.push({
+          _id: `${user._id}_${c}`,
+          userId: user._id,
+          fullname: user.fullname,
+          username: user.username,
+          email: user.email,
+          cycle: c,
+          completedAt: lastMember ? lastMember.createdAt : user.updatedAt
+        });
+      }
+    }
+
+    completions.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+
+    res.json({ completions });
+  } catch (error) {
+    console.error('Error fetching completed cycles:', error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 };
 

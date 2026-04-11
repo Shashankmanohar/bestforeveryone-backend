@@ -15,17 +15,14 @@ export const createWithdrawalRequest = async (req, res) => {
             return res.status(400).json({ message: "Maximum withdrawal per request is ₹50,000" });
         }
 
-        // Restrict to Saturday only
-        const today = new Date();
-        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-        if (dayOfWeek !== 6) {
-            return res.status(400).json({ message: "Withdrawals are only allowed on Saturdays" });
-        }
 
         const user = await User.findById(req.user.id);
-
         if (!user) {
             return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.status === 'blocked') {
+            return res.status(403).json({ message: "Your account is blocked. Withdrawals are not allowed." });
         }
 
         const balance = walletType === 'matrix' ? user.wallet.matrixWallet : user.wallet.balance;
@@ -164,6 +161,13 @@ export const adminApproveWithdrawal = async (req, res) => {
         const { id } = req.params;
         const { status, rejectionReason } = req.body;
 
+        // Admin can only approve/reject withdrawals on Saturday
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0 = Sunday, ..., 6 = Saturday
+        if (dayOfWeek !== 6) {
+            return res.status(403).json({ message: "Withdrawal approvals are only allowed on Saturdays" });
+        }
+
         if (!['approved', 'rejected'].includes(status)) {
             return res.status(400).json({ message: "Invalid status" });
         }
@@ -255,3 +259,38 @@ export const adminMarkCompleted = async (req, res) => {
         res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
+// Admin can edit bank details on a pending withdrawal
+export const adminUpdateWithdrawalBankDetails = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { accountNumber, ifscCode, accountHolderName, bankName } = req.body;
+
+        const withdrawal = await Withdrawal.findById(id);
+
+        if (!withdrawal) {
+            return res.status(404).json({ message: "Withdrawal not found" });
+        }
+
+        if (withdrawal.status !== 'pending') {
+            return res.status(400).json({ message: "Can only edit bank details of a pending withdrawal" });
+        }
+
+        // Update only the fields that were provided
+        if (accountNumber) withdrawal.bankDetails.accountNumber = accountNumber;
+        if (ifscCode) withdrawal.bankDetails.ifscCode = ifscCode;
+        if (accountHolderName) withdrawal.bankDetails.accountHolderName = accountHolderName;
+        if (bankName) withdrawal.bankDetails.bankName = bankName;
+
+        await withdrawal.save();
+
+        res.json({
+            message: "Bank details updated successfully",
+            withdrawal
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
