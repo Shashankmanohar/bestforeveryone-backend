@@ -369,7 +369,7 @@ export const getFinancialLedger = async (req, res) => {
 
 // ===== SYSTEM CONFIGURATION =====
 const systemConfig = {
-  joiningFee: 1000,
+  joiningFee: 1180,
   lvl1Reward: 300,
   lvl2Reward: 300,
   adminFee: 20,
@@ -500,8 +500,8 @@ export const approvePayment = async (req, res) => {
     }
 
     // Update Platform Revenue
-    // Fee is 1180 for re-entry, 1000 for initial joining
-    const activationFee = (user.matrix && user.matrix.cycle > 1) ? 1180 : 1000;
+    // Fee is 1180 for both joining and re-entry
+    const activationFee = 1180;
 
     console.log(`📝 [approvePayment] Updating platform revenue with fee: ${activationFee}...`);
     await Revenue.findOneAndUpdate(

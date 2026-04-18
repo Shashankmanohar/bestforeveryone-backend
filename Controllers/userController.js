@@ -7,11 +7,11 @@ import { processMatrixPlacement } from "./matrixController.js";
 const signupUser = async (req, res) => {
   try {
     console.log('Signup request received:', req.body);
-    const { fullname, username, email, password, referralCode } = req.body;
+    const { fullname, username, email, phone, password, referralCode } = req.body;
 
     console.log('Validating fields for:', fullname, username);
-    if (!fullname || !username || !email || !password) {
-      console.log('Missing fields:', { fullname: !!fullname, username: !!username, email: !!email, password: !!password });
+    if (!fullname || !username || !email || !phone || !password) {
+      console.log('Missing fields:', { fullname: !!fullname, username: !!username, email: !!email, phone: !!phone, password: !!password });
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -81,6 +81,7 @@ const signupUser = async (req, res) => {
       fullname,
       username,
       email: email.toLowerCase(),
+      phone,
       password: hashedPassword,
       referralCode: newReferralCode,
       referredBy: referrer ? referrer._id : null,
@@ -287,8 +288,8 @@ const activateOtherUser = async (req, res) => {
     }
 
     // --- Fee Calculation ---
-    // First time = 1180 (Admin Charge Waived), Re-entry (cycle > 1) = 1357 (Inc. Admin Charge)
-    const activationFee = (targetUser.matrix && targetUser.matrix.cycle > 1) ? 1357 : 1180;
+    // Fixed Fee = 1180 for both joining and re-entry
+    const activationFee = 1180;
 
     if (activator.wallet.balance < activationFee) {
       return res.status(400).json({ message: `Insufficient balance. You need at least ₹${activationFee} to activate this account.` });

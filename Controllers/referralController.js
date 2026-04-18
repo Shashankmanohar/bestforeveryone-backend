@@ -21,12 +21,14 @@ export const getReferralCode = async (req, res) => {
 export const getUserReferrals = async (req, res) => {
     try {
         const referrals = await Referral.find({ referrer: req.user.id })
-            .populate('referred', 'fullname email status verified createdAt')
+            .populate('referred', 'fullname email phone status verified createdAt')
             .sort({ createdAt: -1 });
 
         const formattedReferrals = referrals.map((ref, index) => ({
             id: index + 1,
             name: ref.referred.fullname,
+            email: ref.referred.email,
+            phone: ref.referred.phone,
             joined: getRelativeTime(ref.createdAt),
             status: ref.status,
             verified: ref.verified,

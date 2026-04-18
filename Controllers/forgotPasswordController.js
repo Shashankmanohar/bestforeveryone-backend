@@ -26,7 +26,7 @@ const sendOTPEmail = async (to, otp, name = "User") => {
     const transporter = createTransporter();
 
     const mailOptions = {
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: `"Best For Everyone" <hello.bestforeveryone@gmail.com>`,
         to,
         subject: "Password Reset OTP - Best For Everyone",
         html: `

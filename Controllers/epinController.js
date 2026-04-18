@@ -19,8 +19,8 @@ const generatePin = async () => {
 export const buyEpin = async (req, res) => {
     try {
         const userId = req.user.id;
-        const amount = 1357; // 1180 + 15% charge
-        const adminFee = 177; // 15% of 1180
+        const amount = 1380; // 1200 + 15% charge (rounded up) or 1180 + 200 fee
+        const adminFee = 200; // Fixed fee for E-pin purchase
 
         const user = await User.findById(userId);
         if (!user) {
@@ -194,7 +194,7 @@ export const adminCreateEpins = async (req, res) => {
     try {
         const { count, amount } = req.body;
         const pinCount = parseInt(count) || 1;
-        const pinAmount = parseFloat(amount) || 1357;
+        const pinAmount = parseFloat(amount) || 1380;
 
         if (pinCount > 100) {
             return res.status(400).json({ message: "Cannot generate more than 100 pins at once" });
@@ -248,9 +248,26 @@ export const adminAssignEpin = async (req, res) => {
             return res.status(404).json({ message: "Target user not found" });
         }
 
-        // Only update pins that are currently active
+        // Verify that the pins are currently owned by an Admin (and not already assigned to a user)
+        const pinsToUpdate = await Epin.find({ _id: { $in: pinIds }, status: "active" });
+        
+        // Use a loop or $in query to ensure only unassigned pins are moved
+        const validPinIds = [];
+        const { default: Admin } = await import("../Models/adminModels.js");
+        const adminIds = (await Admin.find({}, '_id')).map(a => a._id.toString());
+
+        for (const pin of pinsToUpdate) {
+            if (adminIds.includes(pin.owner.toString())) {
+                validPinIds.push(pin._id);
+            }
+        }
+
+        if (validPinIds.length === 0) {
+            return res.status(400).json({ message: "None of the selected pins are available for assignment (they may be already assigned or bought by users)" });
+        }
+
         const result = await Epin.updateMany(
-            { _id: { $in: pinIds }, status: "active" },
+            { _id: { $in: validPinIds } },
             { $set: { owner: targetUser._id } }
         );
 

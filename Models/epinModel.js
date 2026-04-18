@@ -15,7 +15,7 @@ const epinSchema = new mongoose.Schema(
         },
         amount: {
             type: Number,
-            default: 1357,
+            default: 1380,
         },
         status: {
             type: String,
