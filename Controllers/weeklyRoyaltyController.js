@@ -18,13 +18,13 @@ import Revenue from '../Models/revenueModel.js';
  * 
  * Earning Caps:
  * - Star: ₹10,000 total royalty
- * - Double Star: ₹50,000 total royalty
- * - Super Star: ₹1,00,000 total royalty
+ * - Double Star: ₹25,000 total royalty
+ * - Super Star: ₹50,000 total royalty
  */
 const ROYALTY_CAPS = {
     STAR: 10000,
-    DOUBLE_STAR: 50000,
-    SUPER_STAR: 100000
+    DOUBLE_STAR: 25000,
+    SUPER_STAR: 50000
 };
 
 export const distributeWeeklyRoyalty = async (req, res) => {
@@ -171,7 +171,7 @@ export const distributeWeeklyRoyalty = async (req, res) => {
                     status: 'credit'
                 });
             }
-            payouts.push(`Paid to ${doubleStarAchievers.length} Double Star achievers (subject to ₹50k cap).`);
+            payouts.push(`Paid to ${doubleStarAchievers.length} Double Star achievers (subject to ₹25k cap).`);
         }
 
         // 8. Distribute to Super Star Achievers
@@ -201,7 +201,7 @@ export const distributeWeeklyRoyalty = async (req, res) => {
                     status: 'credit'
                 });
             }
-            payouts.push(`Paid to ${superStarAchievers.length} Super Star achievers (subject to ₹100k cap).`);
+            payouts.push(`Paid to ${superStarAchievers.length} Super Star achievers (subject to ₹50k cap).`);
         }
 
         // 9. Update last distribution date in Revenue
